@@ -1,0 +1,216 @@
+---
+title: 'Database Overview'
+description: 'CS Library Kiosk database module using SQLite with async/await support'
+---
+
+## Introduction
+
+The database module provides async database operations for the CS Library Kiosk system. It uses SQLite with bcrypt for password hashing and provides a clean async interface for all database operations.
+
+## Database Connection
+
+The module uses a centralized connection pattern with SQLite:
+
+```python
+import sqlite3
+from pathlib import Path
+
+DB_PATH = Path(__file__).parent / "cs_library.db"
+
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+```
+
+### Key Features
+
+- **Row Factory**: Returns rows as `sqlite3.Row` objects for dict-like access
+- **Foreign Keys**: Enforces referential integrity with `PRAGMA foreign_keys = ON`
+- **Async Execution**: All blocking SQLite calls run off the event loop thread
+
+## Async/Await Pattern
+
+All database operations are async to prevent blocking the event loop:
+
+```python
+async def _run(fn):
+    """Run a blocking SQLite call off the event loop thread."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, fn)
+```
+
+This ensures the UI remains responsive during database operations.
+
+## Database Initialization
+
+<CodeGroup>
+```python Function Signature
+def init_db() -> None:
+    """Initialize database schema and create tables if they don't exist."""
+```
+
+```python Usage Example
+from nicegui import app
+import database as db
+
+# Initialize database on application startup
+db.init_db()
+
+app.run()
+```
+</CodeGroup>
+
+### Returns
+
+This function returns `None` and is called once at application startup.
+
+### Schema Details
+
+The `init_db()` function creates three tables:
+
+#### Users Table
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id    TEXT    NOT NULL UNIQUE,
+    name          TEXT    NOT NULL,
+    email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT    NOT NULL,
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+<ParamField path="id" type="INTEGER">
+  Primary key, auto-incremented
+</ParamField>
+
+<ParamField path="student_id" type="TEXT">
+  Unique student identifier used for barcode scanner login
+</ParamField>
+
+<ParamField path="name" type="TEXT">
+  Full name of the user
+</ParamField>
+
+<ParamField path="email" type="TEXT">
+  Email address (case-insensitive unique constraint)
+</ParamField>
+
+<ParamField path="password_hash" type="TEXT">
+  Bcrypt-hashed password
+</ParamField>
+
+<ParamField path="active" type="INTEGER">
+  Account status (1 = active, 0 = inactive)
+</ParamField>
+
+#### Books Table
+
+```sql
+CREATE TABLE IF NOT EXISTS books (
+    isbn    TEXT PRIMARY KEY,
+    title   TEXT NOT NULL,
+    author  TEXT NOT NULL,
+    cover   TEXT NOT NULL DEFAULT "",
+    status  TEXT NOT NULL DEFAULT "Available",
+    shelf   TEXT NOT NULL DEFAULT ""
+);
+```
+
+<ParamField path="isbn" type="TEXT">
+  Primary key, ISBN-10 or ISBN-13 identifier
+</ParamField>
+
+<ParamField path="title" type="TEXT">
+  Book title
+</ParamField>
+
+<ParamField path="author" type="TEXT">
+  Author name
+</ParamField>
+
+<ParamField path="cover" type="TEXT">
+  URL to book cover image
+</ParamField>
+
+<ParamField path="status" type="TEXT">
+  Either "Available" or "Checked Out"
+</ParamField>
+
+<ParamField path="shelf" type="TEXT">
+  Physical shelf location (optional)
+</ParamField>
+
+#### Loans Table
+
+```sql
+CREATE TABLE IF NOT EXISTS loans (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    isbn          TEXT    NOT NULL REFERENCES books(isbn),
+    checked_out   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date      DATETIME NOT NULL,
+    returned      INTEGER  NOT NULL DEFAULT 0,
+    returned_date DATETIME
+);
+```
+
+<ParamField path="id" type="INTEGER">
+  Primary key, auto-incremented
+</ParamField>
+
+<ParamField path="user_id" type="INTEGER">
+  Foreign key to users.id
+</ParamField>
+
+<ParamField path="isbn" type="TEXT">
+  Foreign key to books.isbn
+</ParamField>
+
+<ParamField path="checked_out" type="DATETIME">
+  Timestamp when book was checked out
+</ParamField>
+
+<ParamField path="due_date" type="DATETIME">
+  When the book is due back (14 days from checkout)
+</ParamField>
+
+<ParamField path="returned" type="INTEGER">
+  Return status (0 = active loan, 1 = returned)
+</ParamField>
+
+<ParamField path="returned_date" type="DATETIME">
+  Timestamp when book was returned (NULL if not returned)
+</ParamField>
+
+## Configuration
+
+### Database Path
+
+The SQLite database file is created in the same directory as the module:
+
+```python
+DB_PATH = Path(__file__).parent / "cs_library.db"
+```
+
+### Open Library API
+
+Toggle live Open Library lookups:
+
+```python
+USE_LIVE_API = True  # Set False for offline/testing mode
+```
+
+When `False`, only books already in the local database are available.
+
+## Error Handling
+
+The module uses Python's `Optional` type hints to indicate when operations may fail:
+
+- Functions returning `Optional[dict]` return `None` on failure
+- Functions returning `bool` return `False` on failure
+- `IntegrityError` exceptions are caught for duplicate key violations

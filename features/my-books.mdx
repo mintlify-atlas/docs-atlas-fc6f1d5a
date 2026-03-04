@@ -1,0 +1,212 @@
+---
+title: My Books
+description: View active loans, check due dates, detect overdue items, and renew books
+---
+
+The My Books section provides a complete view of your borrowing activity, including currently checked out books and your full borrowing history.
+
+## Viewing Active Loans
+
+Access your currently borrowed books to track due dates and manage returns.
+
+<Steps>
+  <Step title="Open My Books">
+    Click the **"MY BOOKS"** button in the navigation bar. The system automatically loads your loan records when the page opens.
+  </Step>
+  
+  <Step title="Review currently checked out books">
+    The "Currently Checked Out" section displays all active loans with:
+    - Book cover thumbnail (48px × 64px)
+    - Title (bold white text)
+    - Author name (gray text)
+    - Due date or overdue status
+    - Renew button
+    
+    The section header shows: "Total Books Checked Out: X" where X is the count of active loans.
+  </Step>
+  
+  <Step title="Check due dates">
+    Each book displays its due date in one of two formats:
+    - **On-time**: Blue text showing "Due: March 18, 2026"
+    - **Overdue**: Red text showing "OVERDUE: March 18, 2026"
+  </Step>
+</Steps>
+
+<Info>
+If you have no active loans, you'll see a green checkmark icon with the message: "No books currently checked out"
+</Info>
+
+## Due Date Detection
+
+The system automatically calculates and displays due date status:
+
+### On-Time Books
+
+- **Text color**: Blue (`text-blue-400`)
+- **Format**: "Due: [Date]"
+- **Condition**: `due_date >= datetime.now()`
+- **Date format**: "Month DD, YYYY" (e.g., "March 18, 2026")
+
+### Overdue Books
+
+- **Text color**: Red (`text-red-400`)
+- **Format**: "OVERDUE: [Date]"
+- **Condition**: `due_date < datetime.now()`
+- **Visual indicator**: Red text with bold font weight
+
+<Warning>
+Overdue detection happens in real-time. A book becomes overdue immediately after midnight on the due date.
+</Warning>
+
+## Book Renewal
+
+Extend your loan period by renewing books directly from the My Books page.
+
+<Steps>
+  <Step title="Locate the book to renew">
+    Find the book in your "Currently Checked Out" list. Each book card has a **"RENEW"** button on the right side.
+  </Step>
+  
+  <Step title="Click Renew">
+    Click the blue **"RENEW"** button. The system will:
+    - Calculate a new due date (14 days from today)
+    - Update the loan record in the database
+    - Refresh the My Books display
+    - Show a success notification
+  </Step>
+  
+  <Step title="Confirmation">
+    Upon successful renewal, you'll see:
+    - Notification: "Book renewed successfully for 14 more days!"
+    - Updated due date displayed on the book card
+    - The renewal is immediate and reflected in real-time
+  </Step>
+</Steps>
+
+<Note>
+The renewal extends the due date by **14 days from the current date**, not from the original due date.
+</Note>
+
+### Renewal Restrictions
+
+The Renew button has specific availability rules:
+
+**Enabled (Blue)**
+- Book is not overdue
+- Styling: `bg-blue-600/20 text-blue-400 hover:bg-blue-500/30`
+- Fully clickable and functional
+
+**Disabled (Gray)**
+- Book is overdue
+- Styling: `bg-slate-800 text-slate-500`
+- Button is not clickable
+- Overdue books cannot be renewed
+
+<Warning>
+**Overdue books cannot be renewed**
+
+If a book is past its due date, the Renew button will be disabled (grayed out). You must return the book first, then check it out again if you need it longer.
+</Warning>
+
+## Borrowing History
+
+View your complete library activity with returned books and return dates.
+
+### History Display
+
+The "Borrowing History" section shows all previously returned books:
+
+- Book cover (40px × 56px, smaller than active loans)
+- Title and author
+- Return date formatted as "Returned: Month DD, YYYY"
+- Reduced opacity (70%) to visually distinguish from active loans
+- Lighter background (`bg-white/[0.03]`) for subtle appearance
+
+<Info>
+History items are sorted by checkout date in descending order, showing most recent activity first.
+</Info>
+
+### Empty History State
+
+If you've never returned a book, you'll see:
+- History icon (clock/history symbol)
+- Message: "No borrowing history yet"
+- Gray styling with 40% opacity
+
+## Data Display Format
+
+The My Books page pulls data from the loans table joined with book metadata:
+
+```sql
+SELECT
+    l.id, l.returned, l.due_date, l.returned_date,
+    b.title, b.author, b.cover
+FROM loans l
+JOIN books b ON l.isbn = b.isbn
+WHERE l.user_id = ?
+ORDER BY l.checked_out DESC
+```
+
+<Note>
+Loan records are fetched in real-time when you open the My Books page, ensuring you always see current data.
+</Note>
+
+## Renewal Policy Details
+
+When you renew a book:
+
+- **Extension period**: 14 days
+- **Calculation**: `new_due_date = datetime.now() + timedelta(days=14)`
+- **Database update**: `UPDATE loans SET due_date = ? WHERE id = ?`
+- **Validation**: System checks that the loan is active (not returned)
+
+<Info>
+Renewals can be performed multiple times on the same book as long as it's not overdue.
+</Info>
+
+## Auto-Refresh Behavior
+
+The My Books display automatically refreshes after:
+
+- Renewing a book
+- Returning a book (updates history)
+- Navigating to the My Books tab
+
+<Note>
+The page does not auto-refresh while you're viewing it. Click "MY BOOKS" again to manually refresh if needed.
+</Note>
+
+## Visual Organization
+
+The page uses clear visual hierarchy:
+
+1. **Section header**: "MY BORROWED BOOKS" in blue tracking-wide text
+2. **Active loans section**: 
+   - Title: "Currently Checked Out"
+   - Count indicator
+   - List of active loans with renewal buttons
+3. **Divider line**: Horizontal gray separator
+4. **History section**:
+   - Title: "Borrowing History"
+   - List of returned books with return dates
+
+## Troubleshooting
+
+**"Could not renew book" error**
+- The book may have been returned already
+- Check that the book is still in your active loans
+- Refresh the My Books page and try again
+
+**Due dates not updating after renewal**
+- The page auto-refreshes after renewal
+- If the date doesn't change, manually refresh by clicking "MY BOOKS" again
+
+**Overdue book shows wrong status**
+- Due dates are compared against the current server time
+- Verify your system clock is correct
+- Overdue status updates in real-time on page load
+
+**Renewal button disabled**
+- This is intentional for overdue books
+- Return the book, then check it out again if still needed
+- Only on-time books can be renewed

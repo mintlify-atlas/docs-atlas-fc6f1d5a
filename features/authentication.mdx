@@ -1,0 +1,102 @@
+---
+title: Authentication
+description: Sign in to CS Library Kiosk using student ID barcode or email/password
+---
+
+The CS Library Kiosk supports two authentication methods to access the system: barcode-based student ID login and email/password login.
+
+## Student ID Barcode Login
+
+The fastest way to sign in is by scanning your student ID barcode at the kiosk.
+
+<Steps>
+  <Step title="Navigate to the login screen">
+    When you approach the kiosk, you'll see the "CS Library Sign-in Portal" welcome screen with a student ID input field.
+  </Step>
+  
+  <Step title="Scan your student ID">
+    Position your student ID card barcode under the scanner. The system will automatically read the barcode and populate the Student ID field.
+    
+    Alternatively, you can manually type your student ID number if the scanner is unavailable.
+  </Step>
+  
+  <Step title="Press Enter or click Sign In">
+    After scanning or entering your ID, press Enter on the keyboard or click the blue "Sign In" button.
+  </Step>
+  
+  <Step title="Access granted">
+    If your student ID is valid and your account is active, you'll see a welcome notification and be taken to the catalog dashboard.
+  </Step>
+</Steps>
+
+<Note>
+The system validates your student ID against the database and checks that your account status is active before granting access.
+</Note>
+
+## Email/Password Login
+
+For users who prefer credential-based authentication, the system also supports email and password login.
+
+<Steps>
+  <Step title="Access the email login page">
+    Navigate to the email/password login interface. You'll see fields for email address and password.
+  </Step>
+  
+  <Step title="Enter your credentials">
+    - **Email Address**: Enter your registered email (e.g., molinak4@southernct.edu)
+    - **Password**: Enter your password
+    
+    Press Tab or Enter to move between fields.
+  </Step>
+  
+  <Step title="Sign in">
+    Click the "Sign In" button or press Enter in the password field to authenticate.
+  </Step>
+  
+  <Step title="Successful authentication">
+    The system verifies your credentials using bcrypt password hashing. Upon success, you'll be logged in and redirected to the dashboard.
+  </Step>
+</Steps>
+
+<Warning>
+Passwords are securely hashed using bcrypt. The system performs case-insensitive email matching for convenience.
+</Warning>
+
+## Test Accounts
+
+For testing and demonstration purposes, the following accounts are available:
+
+| Student ID | Name | Email | Password |
+|------------|------|-------|----------|
+| 12345 | Kenneth Molina | molinak4@southernct.edu | changeme123 |
+| 11111 | Jose Gaspar | gasparmarij1@southernct.edu | changeme123 |
+| 99999 | Professor James | james@southernct.edu | changeme123 |
+
+<Info>
+You can use either the **Student ID** (barcode login) or the **Email/Password** combination (credential login) to access any test account.
+</Info>
+
+## Session Management
+
+Once authenticated:
+
+- Your name appears in the top-right header next to the account icon
+- The header displays "CS_LIBRARY KIOSK" branding with the SCSU logo
+- A logout button is available in the header to end your session
+- Logging out clears your session and returns you to the login screen
+
+<Note>
+The system automatically focuses the input field when you load the login page for quick barcode scanning.
+</Note>
+
+## Troubleshooting
+
+**"Invalid Student ID" error**
+- Verify your student ID is correct
+- Ensure your account is marked as active in the system
+- Contact library administration if the problem persists
+
+**Email login fails**
+- Check that you're using the correct registered email
+- Passwords are case-sensitive
+- Email matching is case-insensitive (molinak4@southernct.edu = MOLINAK4@southernct.edu)

@@ -1,0 +1,189 @@
+---
+title: Catalog & Search
+description: Browse the paginated book catalog and search by title or author
+---
+
+The CS Library Kiosk catalog provides a visual grid interface for browsing the complete collection with real-time availability status and advanced search capabilities.
+
+## Browsing the Catalog
+
+The catalog displays books in a paginated grid format optimized for touchscreen kiosk interaction.
+
+<Steps>
+  <Step title="Access the catalog">
+    Click the **"BROWSE"** button in the navigation bar at the top of the dashboard. This is the default view when you first log in.
+  </Step>
+  
+  <Step title="View the collection">
+    Books are displayed in a responsive grid showing:
+    - Book cover image
+    - Title (bold white text)
+    - Author name (gray text)
+    - Availability badge (green "AVAILABLE" or red "CHECKED OUT")
+    
+    Each book card features:
+    - Dark background with border (`bg-[#151924]/80`)
+    - Hover effect (scales to 105% on mouseover)
+    - Visual distinction between available and checked-out books
+  </Step>
+  
+  <Step title="Navigate pages">
+    Use the pagination controls at the bottom:
+    - **"PREV PAGE"** button (with left chevron icon)
+    - Page indicator showing "Page X of Y"
+    - **"NEXT PAGE"** button (with right chevron icon)
+    
+    Navigation buttons are automatically disabled at the first/last page.
+  </Step>
+</Steps>
+
+<Info>
+The catalog displays **12 books per page** for optimal viewing on kiosk displays.
+</Info>
+
+### Availability Badges
+
+Books display real-time availability status:
+
+- **AVAILABLE** (Green Badge)
+  - Book status: "Available"
+  - Full color display
+  - Green background with green text
+  - Book can be checked out immediately
+
+- **CHECKED OUT** (Red Badge)
+  - Book status: "Checked Out"
+  - Reduced opacity and grayscale filter applied
+  - Red background with red text
+  - Book is currently on loan to another user
+
+<Note>
+Visual styling automatically adjusts based on availability:
+- Available books: `opacity-100` with full color
+- Checked out books: `opacity-60 grayscale` for visual distinction
+</Note>
+
+## Search Functionality
+
+The search feature allows you to filter the catalog by title or author in real-time.
+
+<Steps>
+  <Step title="Open search">
+    Click the **"SEARCH"** button in the navigation bar. This:
+    - Reveals the search input field
+    - Automatically focuses the input for typing
+    - Switches to the catalog view if you're on another screen
+  </Step>
+  
+  <Step title="Enter search query">
+    Type any part of a book title or author name. The search:
+    - Performs case-insensitive matching
+    - Filters in real-time as you type
+    - Searches both title and author fields simultaneously
+    - Resets pagination to page 1 when query changes
+    
+    <Info>
+    The search input is a rounded pill-style field with placeholder text: "Search by Title or Author..."
+    </Info>
+  </Step>
+  
+  <Step title="View filtered results">
+    The catalog grid updates automatically to show only matching books:
+    - Results are paginated (12 per page)
+    - Page count adjusts based on filtered results
+    - Empty results show an empty grid
+    - Clear the search field to return to full catalog
+  </Step>
+</Steps>
+
+### Search Implementation
+
+The search uses a simple but effective filtering algorithm:
+
+```python
+if current_search_query:
+    filtered_books = [
+        b for b in books 
+        if current_search_query in b['title'].lower() 
+        or current_search_query in b['author'].lower()
+    ]
+else:
+    filtered_books = books
+```
+
+<Note>
+Search queries are automatically converted to lowercase for case-insensitive matching.
+</Note>
+
+## Pagination System
+
+The catalog uses smart pagination that adjusts to search results:
+
+- **Items per page**: 12 books
+- **Page calculation**: `total_pages = max(1, (total_books + items_per_page - 1) // items_per_page)`
+- **Index slicing**: `page_books = filtered_books[start_idx:end_idx]`
+
+### Pagination Controls
+
+**Previous Page Button**
+- Disabled on page 1 (darker gray styling)
+- Enabled on pages 2+ (lighter gray with hover effect)
+- Icon: `chevron_left`
+
+**Next Page Button**
+- Disabled on last page (darker gray styling)
+- Enabled when more pages exist (lighter gray with hover effect)
+- Icon: `chevron_right`
+
+**Page Label**
+- Format: "Page X of Y"
+- Updates automatically based on current page and total pages
+- Always shows at least "Page 1 of 1" for empty catalogs
+
+<Warning>
+When you perform a search, the pagination automatically resets to page 1 to show the first results.
+</Warning>
+
+## Current Collection
+
+The catalog header displays "Current Collection" as the section title. The collection includes books from five physical shelves:
+
+- **Shelf 1**: Regression analysis, historical texts
+- **Shelf 2**: Computer networks, UML, web design, network security, software engineering
+- **Shelf 3**: Linux security, Kali Linux, information security, cartography
+- **Shelf 4**: Geography and mapping resources
+- **Shelf 5**: Computer science classics (Turing biography, Knuth's Art of Computer Programming)
+
+<Info>
+The catalog automatically refreshes after checkout and return operations to reflect real-time availability changes.
+</Info>
+
+## Visual Design
+
+Book cards feature a modern glassmorphic design:
+
+- **Card size**: 192px width (`w-48`)
+- **Cover image**: Full width, 224px height (`h-56`), rounded corners
+- **Background**: Semi-transparent dark blue with border
+- **Hover effect**: 105% scale with smooth transition
+- **Shadow**: Drop shadow on book covers for depth
+
+<Note>
+The catalog uses a responsive flexbox grid that wraps cards automatically based on screen width.
+</Note>
+
+## Troubleshooting
+
+**Pagination buttons not working**
+- Buttons are disabled at first/last page (this is intentional)
+- Verify you're not already at the boundary page
+
+**Search returns no results**
+- Check spelling of title or author
+- Try searching for partial words
+- Clear the search field to return to full catalog
+
+**Books not displaying**
+- Catalog loads asynchronously on login
+- Refresh the page if the grid appears empty
+- Check that books exist in the database

@@ -1,0 +1,134 @@
+---
+title: Admin Dashboard
+description: Access and navigate the administrative interface for the CS Library Kiosk
+---
+
+The Admin Dashboard provides comprehensive control over the CS Library Kiosk system, allowing administrators to manage books, users, and monitor library activity.
+
+## Admin Access
+
+Administrators access the system using email and password authentication, separate from the student ID card scanning system.
+
+### Login Credentials
+
+Admins log in through the web interface at the `/` route using:
+- **Email address** (stored in lowercase)
+- **Password** (hashed with bcrypt)
+
+<Note>
+Test admin account: `admin@example.com` / Password as configured in your database
+</Note>
+
+### Authentication Flow
+
+<Steps>
+  <Step title="Navigate to Login">
+    Open the kiosk web interface in your browser
+  </Step>
+  
+  <Step title="Enter Credentials">
+    Enter your admin email and password in the login form (mainwebsite.py:204-221)
+  </Step>
+  
+  <Step title="Authenticate">
+    The system validates your credentials using bcrypt password verification:
+    - Email is normalized to lowercase
+    - Password is checked against the hashed password in the database
+    - Active status is verified (`active = 1`)
+  </Step>
+  
+  <Step title="Access Dashboard">
+    Upon successful authentication, you'll be redirected to the main dashboard interface
+  </Step>
+</Steps>
+
+<Warning>
+Failed login attempts should be monitored. The SRS specifies a 5-attempt lockout policy (though not yet implemented in current codebase).
+</Warning>
+
+## Admin Capabilities
+
+As an administrator, you have access to:
+
+### Book Management
+- Add new books via manual entry or ISBN API lookup
+- Update book status (Available, Checked Out)
+- Manage book metadata (title, author, cover image, shelf location)
+- View complete catalog with real-time availability
+
+### User Management
+- View all registered users
+- Monitor user borrowing activity
+- Manage user active status
+- View user checkout history and current loans
+
+### Reports & Analytics
+- Generate usage statistics
+- View checkout history across all users
+- Identify popular books and usage patterns
+- Export data for analysis
+
+### System Monitoring
+- Real-time inventory status
+- Transaction logs
+- Overdue book tracking
+
+## Security Features
+
+<ParamField path="password_hash" type="string">
+  Admin passwords are stored using bcrypt hashing (database.py:80, 112)
+</ParamField>
+
+<ParamField path="active" type="boolean">
+  Active status controls admin access - inactive admins cannot log in
+</ParamField>
+
+<ParamField path="email" type="string">
+  Email addresses are case-insensitive and stored in lowercase (database.py:88, 109)
+</ParamField>
+
+## Navigation
+
+From the admin dashboard, you can navigate to:
+
+- [Book Management](/admin/book-management) - Add and maintain the library catalog
+- [User Management](/admin/user-management) - Manage user accounts and permissions
+- [Reports](/admin/reports) - Generate analytics and export data
+
+## Session Management
+
+<Note>
+The current implementation uses NiceGUI's session management. The SRS specifies:
+- Session timeout after 15 minutes of inactivity
+- Automatic logout for security
+</Note>
+
+## Admin vs Student Access
+
+Key differences between admin and student access:
+
+| Feature | Students | Administrators |
+|---------|----------|----------------|
+| **Authentication** | Student ID card scan | Email/Password |
+| **Book Checkout** | Self-service | Full access |
+| **Catalog Management** | View only | Full CRUD |
+| **User Management** | Own account only | All users |
+| **Reports** | Personal history | System-wide |
+| **System Settings** | No access | Full access |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Manage Books" icon="books" href="/admin/book-management">
+    Add new books and maintain the catalog
+  </Card>
+  <Card title="Manage Users" icon="users" href="/admin/user-management">
+    View and manage user accounts
+  </Card>
+  <Card title="View Reports" icon="chart-bar" href="/admin/reports">
+    Generate usage statistics and analytics
+  </Card>
+  <Card title="System Config" icon="gear" href="/deployment/configuration">
+    Configure system settings
+  </Card>
+</CardGroup>

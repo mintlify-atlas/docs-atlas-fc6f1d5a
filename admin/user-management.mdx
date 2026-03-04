@@ -1,0 +1,338 @@
+---
+title: User Management
+description: Manage user accounts, view borrowing history, and control library access
+---
+
+The User Management system allows administrators to oversee all library users, monitor borrowing activity, and manage account status.
+
+## User Account Structure
+
+Users are stored in the `users` table with the following schema (database.py:43-51):
+
+```python
+CREATE TABLE users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id    TEXT    NOT NULL UNIQUE,
+    name          TEXT    NOT NULL,
+    email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT    NOT NULL,
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+)
+```
+
+## Viewing All Users
+
+Administrators can view the complete user directory with:
+
+<ParamField path="id" type="integer">
+  Auto-incremented unique user ID (internal database key)
+</ParamField>
+
+<ParamField path="student_id" type="string">
+  Student ID number - must be unique, used for card-scan authentication
+</ParamField>
+
+<ParamField path="name" type="string">
+  Full user name
+</ParamField>
+
+<ParamField path="email" type="string">
+  Email address (case-insensitive, stored in lowercase)
+</ParamField>
+
+<ParamField path="active" type="boolean">
+  Account status: `1` (active) or `0` (inactive). Inactive users cannot log in.
+</ParamField>
+
+<ParamField path="created_at" type="datetime">
+  Account creation timestamp
+</ParamField>
+
+## User Registration
+
+New users can self-register through the `/register` route (mainwebsite.py:152-164).
+
+<Steps>
+  <Step title="Student Access Registration Page">
+    Navigate to `/register` route
+  </Step>
+  
+  <Step title="Enter Account Details">
+    Student provides:
+    - Full name
+    - Email address
+    - Student ID number
+    - Password
+  </Step>
+  
+  <Step title="Password Hashing">
+    System hashes password with bcrypt (database.py:80):
+    ```python
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    ```
+  </Step>
+  
+  <Step title="Account Creation">
+    User record is created with `active = 1` by default (database.py:86-89)
+  </Step>
+</Steps>
+
+<Warning>
+Duplicate email or student_id will fail registration with IntegrityError (database.py:95-96). The UI displays: "That email is already registered. Please sign in." (mainwebsite.py:159)
+</Warning>
+
+## Managing User Active Status
+
+The `active` field controls whether a user can access the system.
+
+### Active Users (`active = 1`)
+- Can authenticate with student ID card or email/password
+- Can check out and return books
+- Full access to catalog and personal borrowing history
+
+### Inactive Users (`active = 0`)
+- **Cannot log in** - authentication fails even with valid credentials (database.py:209)
+- Existing checkouts remain in system
+- Can be reactivated by admin
+
+<Note>
+Authentication checks active status: `if user and user['active']` (mainwebsite.py:209)
+</Note>
+
+## Viewing User Borrowing History
+
+Administrators can view complete borrowing records for any user.
+
+### Current Checkouts
+
+View active loans for a user:
+
+```python
+loans = await db.get_user_loans(user_id)
+active = [l for l in loans if not l.get('returned')]
+```
+
+Displays (database.py:337-345):
+- Book title, author, and cover
+- Checkout date
+- Due date
+- Overdue status (if past due date)
+
+### Borrowing History
+
+View all past transactions:
+
+```python
+history = [l for l in loans if l.get('returned')]
+```
+
+Shows (database.py:337-345):
+- Book details
+- Checkout and return dates
+- Total borrowing activity
+
+## User Loan Records
+
+The `loans` table tracks all checkouts (database.py:62-70):
+
+```python
+CREATE TABLE loans (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    isbn          TEXT    NOT NULL REFERENCES books(isbn),
+    checked_out   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date      DATETIME NOT NULL,
+    returned      INTEGER  NOT NULL DEFAULT 0,
+    returned_date DATETIME
+)
+```
+
+<ParamField path="user_id" type="integer">
+  References users(id) - links loan to user account
+</ParamField>
+
+<ParamField path="isbn" type="string">
+  References books(isbn) - identifies which book was borrowed
+</ParamField>
+
+<ParamField path="checked_out" type="datetime">
+  Timestamp when book was checked out
+</ParamField>
+
+<ParamField path="due_date" type="datetime">
+  Return deadline (14 days from checkout by default)
+</ParamField>
+
+<ParamField path="returned" type="boolean">
+  `0` = still checked out, `1` = returned
+</ParamField>
+
+<ParamField path="returned_date" type="datetime">
+  Timestamp when book was returned (null if still checked out)
+</ParamField>
+
+## Test Accounts
+
+The system includes pre-configured test accounts (mock_data.py:43-47):
+
+<CodeGroup>
+```python Test Users
+TEST_USERS = [
+    (12345, "Kenneth Molina",  "molinak4@southernct.edu",    "changeme123"),
+    (11111, "Jose Gaspar",     "gasparmarij1@southernct.edu","changeme123"),
+    (99999, "Professor James", "james@southernct.edu",        "changeme123"),
+]
+```
+</CodeGroup>
+
+<Note>
+To create test accounts, run: `python mock_data.py` (mock_data.py:51-127)
+</Note>
+
+## User Authentication Methods
+
+The system supports two authentication methods:
+
+### Student ID Card Scan
+
+For kiosk usage (mainwebsite.py:224-258):
+
+```python
+user = await db.get_user_by_id(student_id_input)
+```
+
+- Scans student ID barcode
+- Looks up user by `student_id` field (database.py:120-130)
+- Automatically logs in if active
+
+### Email/Password Login
+
+For web access and admin users (mainwebsite.py:204-221):
+
+```python
+user = await db.authenticate_user(email, password)
+```
+
+- Validates email and password
+- Uses bcrypt for secure password verification (database.py:112)
+- Returns user data if credentials match and account is active
+
+## Managing User Access
+
+### Activating a User
+
+To enable access for an inactive user:
+
+```sql
+UPDATE users SET active = 1 WHERE email = 'user@example.com';
+```
+
+### Deactivating a User
+
+To suspend access without deleting the account:
+
+```sql
+UPDATE users SET active = 0 WHERE email = 'user@example.com';
+```
+
+<Warning>
+Deactivating a user does NOT automatically return their checked-out books. Handle active loans before deactivating accounts.
+</Warning>
+
+## User Activity Monitoring
+
+Administrators should monitor:
+
+### Overdue Books
+
+Identify users with overdue items (mainwebsite.py:330-337):
+
+```python
+due = loan.get('due_date')
+if isinstance(due, datetime):
+    overdue = due < datetime.now()
+```
+
+Overdue books are flagged in red in the "My Books" interface.
+
+### Checkout Patterns
+
+Track user borrowing behavior:
+- Total checkouts per user
+- Most active borrowers
+- Renewal patterns
+
+<Note>
+The SRS (US009, lines 234-243) specifies future features including:
+- Setting borrowing limits per user
+- Semester reset functionality
+- Enhanced user reporting
+</Note>
+
+## User Data Privacy
+
+Security measures in place:
+
+- **Password hashing** - bcrypt with automatic salt generation (database.py:80)
+- **Case-insensitive email** - prevents duplicate accounts (database.py:47)
+- **No sensitive PII storage** - minimal personal data retained
+- **SQL injection protection** - parameterized queries throughout (database.py)
+
+<Warning>
+The SRS (lines 385-387) specifies that student ID numbers should be encrypted at rest. This is a planned security enhancement.
+</Warning>
+
+## Common Administrative Tasks
+
+### Finding a User by Email
+
+```python
+user = await db.authenticate_user(email, password)
+# Returns: {'id', 'name', 'student_id', 'email', 'active'}
+```
+
+### Finding a User by Student ID
+
+```python
+user = await db.get_user_by_id(student_id)
+# Returns: {'id', 'name', 'email', 'student_id', 'active'}
+```
+
+### Viewing a User's Current Checkouts
+
+```python
+loans = await db.get_user_loans(user_id)
+active_loans = [l for l in loans if not l.get('returned')]
+```
+
+### Checking User Active Status
+
+The returned user dict includes the `active` boolean:
+
+```python
+if user['active']:
+    # User can access system
+else:
+    # User is suspended
+```
+
+## Database Reference
+
+Key functions for user management:
+
+- `register_user(name, email, student_id, password)` - Create new account (database.py:77-98)
+- `authenticate_user(email, password)` - Validate login credentials (database.py:101-117)
+- `get_user_by_id(student_id)` - Look up user by student ID (database.py:120-130)
+- `get_user_loans(user_id)` - Fetch all loans for a user (database.py:332-360)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Reports" icon="chart-bar" href="/admin/reports">
+    Generate user activity reports and statistics
+  </Card>
+  <Card title="Book Management" icon="books" href="/admin/book-management">
+    Manage the library catalog
+  </Card>
+</CardGroup>

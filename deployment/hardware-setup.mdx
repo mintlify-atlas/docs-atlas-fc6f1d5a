@@ -1,0 +1,200 @@
+---
+title: 'Hardware Setup'
+description: 'Complete hardware setup guide for the CS Library Kiosk system'
+---
+
+## Hardware Components
+
+The CS Library Kiosk requires the following hardware components for deployment:
+
+### Required Components
+
+<CardGroup cols={2}>
+  <Card title="Raspberry Pi 5" icon="microchip">
+    4GB RAM minimum for optimal performance
+  </Card>
+  <Card title="7-inch Touchscreen" icon="display">
+    Official Raspberry Pi touchscreen display
+  </Card>
+  <Card title="USB Barcode Scanner" icon="barcode">
+    Compatible with both ISBN and student ID barcodes
+  </Card>
+  <Card title="UPS (Uninterruptible Power Supply)" icon="bolt">
+    For graceful shutdown during power interruptions
+  </Card>
+</CardGroup>
+
+### Optional Components
+
+- **Receipt Printer**: For printing transaction records
+- **External USB Storage**: For additional backup capacity
+- **Ethernet Cable**: For stable network connectivity
+
+<Note>
+The system is designed to use a **single USB barcode scanner** for both student IDs and book ISBNs to simplify user interaction.
+</Note>
+
+## Hardware Assembly
+
+<Steps>
+  <Step title="Prepare the Raspberry Pi 5">
+    Ensure you have a Raspberry Pi 5 with at least 4GB RAM. The system is optimized for this hardware platform.
+  </Step>
+
+  <Step title="Connect the Touchscreen Display">
+    Attach the official 7-inch Raspberry Pi touchscreen display:
+    
+    - Connect the display ribbon cable to the DSI port on the Raspberry Pi
+    - Secure the display mounting bracket if using an enclosure
+    - Power the display through the appropriate power connection
+    
+    <Warning>
+    Ensure the Raspberry Pi is powered off when connecting the display ribbon cable to prevent damage.
+    </Warning>
+  </Step>
+
+  <Step title="Connect the USB Barcode Scanner">
+    Plug the USB barcode scanner into one of the Raspberry Pi's USB ports. The scanner should be recognized as a keyboard input device.
+    
+    Test the scanner by opening a text editor and scanning a barcode - the numbers should appear as typed input.
+  </Step>
+
+  <Step title="Set Up the UPS">
+    Connect the Raspberry Pi power supply through the UPS:
+    
+    - Plug the Raspberry Pi power adapter into the UPS output
+    - Connect the UPS to the wall outlet
+    - Configure the UPS to provide at least 5-10 minutes of backup power
+    
+    This ensures graceful shutdown during power outages and protects against SD card corruption.
+  </Step>
+
+  <Step title="Network Connection (Optional but Recommended)">
+    For optimal stability and Open Library API access:
+    
+    - Connect an Ethernet cable from the Raspberry Pi to your network switch
+    - Alternatively, configure WiFi during OS setup
+    - Ensure the network allows outbound HTTPS connections for API calls
+  </Step>
+</Steps>
+
+## Physical Installation
+
+### Location Requirements
+
+Based on the site survey of the CS Lounge:
+
+<Check>
+  - Sufficient space available for kiosk placement
+</Check>
+<Check>
+  - Ethernet port accessible for wired connection
+</Check>
+<Check>
+  - Close proximity to the library bookshelf
+</Check>
+<Check>
+  - Power outlet available for UPS connection
+</Check>
+
+### Mounting and Positioning
+
+1. **Position the kiosk** at a comfortable height for touchscreen interaction (typically 36-42 inches from floor)
+2. **Secure the Raspberry Pi** in a protective enclosure to prevent physical tampering
+3. **Position the barcode scanner** within easy reach, either mounted or on a flexible stand
+4. **Ensure adequate ventilation** around the Raspberry Pi to prevent overheating
+
+<Warning>
+Implement physical security measures for the Raspberry Pi unit to prevent theft or unauthorized access to the hardware.
+</Warning>
+
+## Performance Specifications
+
+### Expected Performance Metrics
+
+| Metric | Target |
+|--------|--------|
+| System Boot Time | < 60 seconds to ready state |
+| Checkout/Return Transaction | < 3 seconds |
+| Search Results Display | < 2 seconds |
+| Concurrent Users (Peak) | 5+ users |
+| Uptime During Operating Hours | 99% (8 AM - 10 PM) |
+
+## Hardware Validation
+
+After assembly, verify the following:
+
+<Steps>
+  <Step title="Power On Test">
+    Boot the Raspberry Pi and verify:
+    - Display shows boot sequence
+    - System completes boot within 60 seconds
+    - Touchscreen responds to input
+  </Step>
+
+  <Step title="Scanner Test">
+    - Scan a test ISBN barcode
+    - Verify barcode data is captured correctly
+    - Test with both book ISBNs and student ID formats
+  </Step>
+
+  <Step title="Network Connectivity">
+    - Verify internet connection is established
+    - Test API connectivity to openlibrary.org
+    - Confirm local network access if using MySQL over network
+  </Step>
+
+  <Step title="UPS Functionality">
+    - Disconnect wall power while system is running
+    - Verify UPS provides continuous power
+    - Test graceful shutdown procedure if needed
+  </Step>
+</Steps>
+
+## Troubleshooting Common Hardware Issues
+
+### Display Not Working
+
+- Check DSI ribbon cable connection
+- Verify display power connection
+- Check `/boot/config.txt` for display settings
+
+### Barcode Scanner Not Recognized
+
+```bash
+# List USB devices to verify scanner is detected
+lsusb
+
+# Check input devices
+ls /dev/input/
+```
+
+### System Overheating
+
+- Ensure adequate ventilation around Raspberry Pi
+- Consider adding a heatsink or small fan
+- Monitor temperature:
+
+```bash
+vcgencmd measure_temp
+```
+
+### Network Connectivity Issues
+
+```bash
+# Check network interfaces
+ip addr show
+
+# Test internet connectivity
+ping -c 4 8.8.8.8
+
+# Test DNS resolution
+ping -c 4 openlibrary.org
+```
+
+## Next Steps
+
+Once hardware is assembled and validated, proceed to:
+
+- [Raspberry Pi OS Setup](/deployment/raspberry-pi) - Install and configure the operating system
+- [System Configuration](/deployment/configuration) - Set up the application and database

@@ -1,97 +1,128 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: CS Library Kiosk
+description: A self-service library management kiosk system for the SCSU Computer Science Department
 ---
 
-## Setting up
+<img
+  className="block dark:hidden"
+  src="/images/hero-light.svg"
+  alt="Hero Light"
+/>
+<img
+  className="hidden dark:block"
+  src="/images/hero-dark.svg"
+  alt="Hero Dark"
+/>
 
-Get your documentation site up and running in minutes.
+## Welcome to CS Library Kiosk
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+A secure, automated library kiosk system built for the Computer Science Department at Southern Connecticut State University. This touchscreen-enabled kiosk allows students to browse the catalog, check out books, view their borrowing history, and return items - all without manual paperwork.
 
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Quick Start"
+    icon="rocket"
+    href="/quickstart"
   >
-    Edit your docs locally and preview them in real time.
+    Get the kiosk up and running in minutes
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Installation Guide"
+    icon="download"
+    href="/installation"
   >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+    Complete setup instructions for deployment
   </Card>
   <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
+    title="Core Features"
+    icon="book-open"
+    href="/features/authentication"
   >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+    Learn how to use the kiosk features
   </Card>
   <Card
-    title="Code samples"
+    title="API Reference"
     icon="code"
-    href="/essentials/code"
+    href="/api/database/overview"
   >
-    Add sample code to demonstrate how to use your product.
+    Technical documentation for developers
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+## Key Features
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+### Student-Friendly Interface
+
+The kiosk features a beautiful, space-themed interface with intuitive navigation designed for touchscreen interaction. Students can complete checkouts in seconds.
+
+### Real-Time Catalog
+
+Browse the complete library catalog with:
+- Paginated grid layout showing 12 books per page
+- Real-time availability status
+- Search by title or author
+- Book cover images and metadata
+
+### Smart Checkout System
+
+Scan ISBN barcodes to:
+- Check out multiple books in one transaction
+- View cart with due dates before confirming
+- Automatic 14-day loan period
+- Instant inventory updates
+
+### Self-Service Returns
+
+Return books with a simple barcode scan:
+- Instant status confirmation
+- Automatic overdue calculations
+- Visual feedback for successful returns
+
+### My Books Dashboard
+
+Students can:
+- View all active loans with due dates
+- See overdue items highlighted in red
+- Renew books directly from the interface
+- Access complete borrowing history
+
+### Automated Metadata Retrieval
+
+When a new ISBN is scanned, the system automatically:
+- Queries the Open Library API
+- Retrieves title, author, and cover image
+- Caches data locally for future lookups
+
+## Technology Stack
+
+<CardGroup cols={3}>
+  <Card title="Frontend" icon="paintbrush">
+    NiceGUI with Tailwind CSS for a modern, responsive interface
+  </Card>
+  <Card title="Backend" icon="server">
+    Python 3 with FastAPI and async/await for high performance
+  </Card>
+  <Card title="Database" icon="database">
+    SQLite3 with bcrypt for secure password hashing
+  </Card>
+</CardGroup>
+
+## Hardware Integration
+
+The kiosk is designed to run on:
+- **Raspberry Pi 5** (4GB RAM minimum)
+- **7-inch touchscreen display**
+- **USB barcode scanner** for ISBN and Student ID scanning
+- **Ethernet connection** for network reliability
+
+## Built for SCSU
+
+Developed as part of the SCSU Computer Science Capstone project to modernize the CS Department student lounge library and provide a better experience for students accessing technical resources.
+
+<Note>
+  The system replaces manual paper checkout slips with automated tracking, real-time inventory management, and instant book metadata lookup.
+</Note>
+
+## Get Started
+
+Ready to deploy the kiosk? Check out our [Quick Start Guide](/quickstart) to get up and running in minutes, or dive into the [Installation Guide](/installation) for detailed setup instructions.

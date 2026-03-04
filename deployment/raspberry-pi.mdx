@@ -1,0 +1,515 @@
+---
+title: 'Raspberry Pi Setup'
+description: 'Operating system installation and configuration for the CS Library Kiosk'
+---
+
+## Operating System Installation
+
+### OS Requirements
+
+The CS Library Kiosk runs on **Raspberry Pi OS (64-bit)** optimized for Python 3.11+ applications.
+
+<Note>
+According to the SRS (Section 5.1), the system uses Raspberry Pi OS 64-bit Lite for optimal performance.
+</Note>
+
+## Installing Raspberry Pi OS
+
+<Steps>
+  <Step title="Download Raspberry Pi Imager">
+    Download and install the official Raspberry Pi Imager from:
+    ```bash
+    https://www.raspberrypi.com/software/
+    ```
+  </Step>
+
+  <Step title="Flash the OS">
+    1. Insert your microSD card (32GB minimum recommended)
+    2. Open Raspberry Pi Imager
+    3. Choose **Raspberry Pi OS (64-bit)** under Operating System
+    4. Select your SD card under Storage
+    5. Click the gear icon ⚙️ to configure advanced options
+  </Step>
+
+  <Step title="Configure Advanced Settings">
+    In the advanced settings menu:
+    
+    - **Set hostname**: `cs-library-kiosk`
+    - **Enable SSH**: Check "Enable SSH" and use password authentication
+    - **Set username and password**: Create a secure user account
+    - **Configure WiFi**: Enter your network credentials (if not using Ethernet)
+    - **Set locale settings**: Configure timezone and keyboard layout
+    
+    <Warning>
+    Make note of the username and password - you'll need these for SSH access and system administration.
+    </Warning>
+  </Step>
+
+  <Step title="Write and Boot">
+    - Click **WRITE** to flash the OS to the SD card
+    - Wait for the process to complete (5-10 minutes)
+    - Safely eject the SD card
+    - Insert the SD card into the Raspberry Pi
+    - Power on the device
+  </Step>
+</Steps>
+
+## Initial System Configuration
+
+### First Boot Setup
+
+Once the Raspberry Pi boots, connect via SSH or use the attached display:
+
+```bash
+# SSH into the Raspberry Pi (replace with your hostname/IP)
+ssh pi@cs-library-kiosk.local
+```
+
+### System Updates
+
+<Steps>
+  <Step title="Update package lists and upgrade system">
+    ```bash
+    sudo apt update
+    sudo apt upgrade -y
+    ```
+  </Step>
+
+  <Step title="Install essential system packages">
+    ```bash
+    sudo apt install -y git curl wget vim build-essential
+    ```
+  </Step>
+
+  <Step title="Reboot after updates">
+    ```bash
+    sudo reboot
+    ```
+  </Step>
+</Steps>
+
+## Python Environment Setup
+
+### Install Python 3.11+
+
+The application requires Python 3.11 or higher (per SRS Section 5.1).
+
+```bash
+# Check Python version
+python3 --version
+
+# If needed, install Python 3.11
+sudo apt install -y python3 python3-pip python3-venv
+```
+
+### Install System Dependencies
+
+Install required system libraries for the application:
+
+```bash
+# Install dependencies for Python packages
+sudo apt install -y \
+  python3-dev \
+  libffi-dev \
+  libssl-dev \
+  libjpeg-dev \
+  zlib1g-dev \
+  libopenjp2-7 \
+  libtiff5
+
+# Install database and networking tools
+sudo apt install -y sqlite3 libsqlite3-dev
+```
+
+## Application Installation
+
+<Steps>
+  <Step title="Clone the Repository">
+    ```bash
+    cd /opt
+    sudo git clone <repository-url> cs-library-kiosk
+    cd cs-library-kiosk
+    ```
+    
+    <Note>
+    Replace `<repository-url>` with your actual Git repository URL.
+    </Note>
+  </Step>
+
+  <Step title="Create Virtual Environment">
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
+  </Step>
+
+  <Step title="Install Python Dependencies">
+    Install all required packages from `requirements.txt`:
+    
+    ```bash
+    pip install --upgrade pip
+    pip install -r requirements.txt
+    ```
+    
+    This will install:
+    - **NiceGUI** (3.7.1) - Web UI framework
+    - **FastAPI** (0.129.0) - Backend framework
+    - **SQLAlchemy** (2.0.46) - Database ORM
+    - **bcrypt** (5.0.0) - Password hashing
+    - **httpx** (0.28.1) - HTTP client for Open Library API
+    - And all other dependencies
+  </Step>
+
+  <Step title="Initialize the Database">
+    Set up the SQLite database with initial schema:
+    
+    ```bash
+    python3 mock_data.py
+    ```
+    
+    This creates `cs_library.db` with test accounts and sample data.
+  </Step>
+
+  <Step title="Test the Application">
+    Verify the application runs correctly:
+    
+    ```bash
+    python3 main.py
+    ```
+    
+    The kiosk should start on `http://0.0.0.0:8080`
+    
+    Press `Ctrl+C` to stop the test run.
+  </Step>
+</Steps>
+
+## Systemd Service Configuration
+
+To run the kiosk automatically on boot, create a systemd service.
+
+<Steps>
+  <Step title="Create Service File">
+    Create a new systemd service file:
+    
+    ```bash
+    sudo vim /etc/systemd/system/cs-library-kiosk.service
+    ```
+  </Step>
+
+  <Step title="Add Service Configuration">
+    Add the following configuration:
+    
+    ```ini
+    [Unit]
+    Description=CS Library Kiosk Service
+    After=network.target
+    
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/opt/cs-library-kiosk
+    Environment="PATH=/opt/cs-library-kiosk/venv/bin"
+    ExecStart=/opt/cs-library-kiosk/venv/bin/python3 main.py
+    Restart=always
+    RestartSec=10
+    StandardOutput=journal
+    StandardError=journal
+    
+    [Install]
+    WantedBy=multi-user.target
+    ```
+    
+    <Note>
+    Adjust `User=pi` and paths if you used different username or installation directory.
+    </Note>
+  </Step>
+
+  <Step title="Enable and Start the Service">
+    ```bash
+    # Reload systemd to recognize new service
+    sudo systemctl daemon-reload
+    
+    # Enable service to start on boot
+    sudo systemctl enable cs-library-kiosk.service
+    
+    # Start the service now
+    sudo systemctl start cs-library-kiosk.service
+    ```
+  </Step>
+
+  <Step title="Verify Service Status">
+    Check that the service is running:
+    
+    ```bash
+    sudo systemctl status cs-library-kiosk.service
+    ```
+    
+    You should see "active (running)" status.
+  </Step>
+</Steps>
+
+## Service Management Commands
+
+```bash
+# Start the service
+sudo systemctl start cs-library-kiosk.service
+
+# Stop the service
+sudo systemctl stop cs-library-kiosk.service
+
+# Restart the service
+sudo systemctl restart cs-library-kiosk.service
+
+# View service logs
+sudo journalctl -u cs-library-kiosk.service -f
+
+# View last 50 log lines
+sudo journalctl -u cs-library-kiosk.service -n 50
+
+# Disable auto-start on boot
+sudo systemctl disable cs-library-kiosk.service
+```
+
+## Automatic Kiosk Mode (Full-Screen Browser)
+
+For a true kiosk experience, configure Chromium to launch in full-screen mode on boot.
+
+<Steps>
+  <Step title="Install Chromium and X Server">
+    ```bash
+    sudo apt install -y chromium-browser xserver-xorg x11-xserver-utils xinit openbox
+    ```
+  </Step>
+
+  <Step title="Create Kiosk Script">
+    Create an autostart script:
+    
+    ```bash
+    mkdir -p /home/pi/.config/openbox
+    vim /home/pi/.config/openbox/autostart
+    ```
+    
+    Add the following:
+    
+    ```bash
+    # Disable screen blanking
+    xset s off
+    xset -dpms
+    xset s noblank
+    
+    # Hide cursor after inactivity
+    unclutter -idle 0.1 &
+    
+    # Start Chromium in kiosk mode
+    chromium-browser \
+      --noerrdialogs \
+      --kiosk \
+      --disable-infobars \
+      --disable-session-crashed-bubble \
+      --check-for-update-interval=31536000 \
+      http://localhost:8080
+    ```
+  </Step>
+
+  <Step title="Auto-start X Server on Boot">
+    Edit `.bash_profile`:
+    
+    ```bash
+    vim /home/pi/.bash_profile
+    ```
+    
+    Add:
+    
+    ```bash
+    [[ -z $DISPLAY && $XDG_VTNR -eq 1 ]] && startx -- -nocursor
+    ```
+  </Step>
+
+  <Step title="Configure Auto-Login">
+    ```bash
+    sudo raspi-config
+    ```
+    
+    Navigate to: **System Options → Boot / Auto Login → Console Autologin**
+    
+    This ensures the system boots directly to the kiosk interface.
+  </Step>
+</Steps>
+
+## Touchscreen Calibration
+
+### Enable Touch Input
+
+The 7-inch touchscreen should work out of the box. If needed, install touchscreen drivers:
+
+```bash
+sudo apt install -y xserver-xorg-input-evdev
+```
+
+### Rotate Display (if needed)
+
+To rotate the display orientation:
+
+```bash
+sudo vim /boot/config.txt
+```
+
+Add one of:
+
+```ini
+# Rotate 90 degrees
+display_rotate=1
+
+# Rotate 180 degrees
+display_rotate=2
+
+# Rotate 270 degrees
+display_rotate=3
+```
+
+## System Monitoring and Logging
+
+### Configure Logging
+
+The application uses Python's logging module and systemd's journald:
+
+```bash
+# View live logs
+sudo journalctl -u cs-library-kiosk.service -f
+
+# View logs from today
+sudo journalctl -u cs-library-kiosk.service --since today
+
+# View logs with error level
+sudo journalctl -u cs-library-kiosk.service -p err
+```
+
+### Monitor System Resources
+
+```bash
+# Check CPU temperature
+vcgencmd measure_temp
+
+# Check memory usage
+free -h
+
+# Check disk usage
+df -h
+
+# Monitor system in real-time
+htop
+```
+
+<Warning>
+Keep CPU temperature below 80°C under load. Add cooling if temperatures consistently exceed this threshold.
+</Warning>
+
+## Performance Optimization
+
+### Reduce Boot Time
+
+```bash
+# Disable unnecessary services
+sudo systemctl disable bluetooth.service
+sudo systemctl disable avahi-daemon.service
+
+# Analyze boot time
+systemd-analyze
+systemd-analyze blame
+```
+
+### Optimize for Kiosk Use
+
+Edit `/boot/config.txt` for performance:
+
+```ini
+# Disable Bluetooth
+dtoverlay=disable-bt
+
+# Increase GPU memory (for better UI performance)
+gpu_mem=128
+
+# Overclock (optional - test stability)
+over_voltage=2
+arm_freq=2000
+```
+
+## Security Hardening
+
+<Steps>
+  <Step title="Change Default Password">
+    ```bash
+    passwd
+    ```
+  </Step>
+
+  <Step title="Configure Firewall">
+    ```bash
+    sudo apt install -y ufw
+    sudo ufw allow ssh
+    sudo ufw allow 8080/tcp
+    sudo ufw enable
+    ```
+  </Step>
+
+  <Step title="Set Up Automatic Security Updates">
+    ```bash
+    sudo apt install -y unattended-upgrades
+    sudo dpkg-reconfigure --priority=low unattended-upgrades
+    ```
+  </Step>
+
+  <Step title="Restrict File Permissions">
+    ```bash
+    # Set proper ownership
+    sudo chown -R pi:pi /opt/cs-library-kiosk
+    
+    # Protect database file
+    chmod 600 /opt/cs-library-kiosk/cs_library.db
+    ```
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Service Won't Start
+
+```bash
+# Check service status
+sudo systemctl status cs-library-kiosk.service
+
+# View detailed logs
+sudo journalctl -u cs-library-kiosk.service -n 100 --no-pager
+
+# Test running manually
+cd /opt/cs-library-kiosk
+source venv/bin/activate
+python3 main.py
+```
+
+### Application Crashes
+
+```bash
+# Check for Python errors
+sudo journalctl -u cs-library-kiosk.service | grep -i error
+
+# Verify all dependencies installed
+source /opt/cs-library-kiosk/venv/bin/activate
+pip list
+```
+
+### Display Issues
+
+```bash
+# Check X server status
+echo $DISPLAY
+
+# Test display manually
+XDISPLAY=:0 chromium-browser http://localhost:8080
+```
+
+## Next Steps
+
+With the Raspberry Pi configured and the service running, proceed to:
+
+- [System Configuration](/deployment/configuration) - Configure database, networking, and backups

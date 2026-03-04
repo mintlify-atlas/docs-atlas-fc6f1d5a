@@ -1,0 +1,248 @@
+---
+title: 'Authentication'
+description: 'User registration, login, and lookup functions'
+---
+
+## Overview
+
+The authentication module provides secure user registration and authentication using bcrypt for password hashing. All functions are async and return user dictionaries or `None` on failure.
+
+## Register User
+
+<CodeGroup>
+```python Function Signature
+async def register_user(
+    name: str,
+    email: str,
+    student_id: str,
+    password: str
+) -> Optional[dict]:
+    """Hash the password and insert a new user.
+    
+    Returns user dict or None if email/student_id taken.
+    """
+```
+
+```python Usage Example
+import database as db
+
+user = await db.register_user(
+    name="John Smith",
+    email="smithj@southernct.edu",
+    student_id="900123456",
+    password="SecurePassword123!"
+)
+
+if user:
+    print(f"Registered: {user['name']}")
+else:
+    print("Registration failed - email or student ID already exists")
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="name" type="string" required>
+  Full name of the user. Will be stripped of leading/trailing whitespace.
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  Email address. Converted to lowercase and stripped. Must be unique.
+</ParamField>
+
+<ParamField path="student_id" type="string" required>
+  Student identifier used for barcode scanner login. Stripped and must be unique.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Plain text password. Will be hashed using bcrypt with auto-generated salt.
+</ParamField>
+
+### Returns
+
+<ResponseField name="user" type="dict | None">
+  Returns user object on success, `None` if email or student_id already exists
+  
+  <Expandable title="User Object Properties">
+    <ResponseField name="id" type="int">
+      Auto-generated database ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's full name
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User's email address (lowercase)
+    </ResponseField>
+    
+    <ResponseField name="student_id" type="string">
+      User's student ID
+    </ResponseField>
+    
+    <ResponseField name="active" type="int">
+      Account status (1 = active, 0 = inactive)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Security Notes
+
+- Passwords are hashed using bcrypt with auto-generated salts
+- Email addresses are case-insensitive (stored as lowercase)
+- Password hashes are never returned in user objects
+- Duplicate emails or student IDs result in `None` return value
+
+## Authenticate User
+
+<CodeGroup>
+```python Function Signature
+async def authenticate_user(
+    email: str,
+    password: str
+) -> Optional[dict]:
+    """Check email + password.
+    
+    Returns user dict on success, else None.
+    """
+```
+
+```python Usage Example
+import database as db
+from nicegui import ui
+
+async def try_login():
+    user = await db.authenticate_user(
+        email=email_input.value,
+        password=password_input.value
+    )
+    
+    if user and user['active']:
+        ui.notify(f"Welcome, {user['name']}!", type='positive')
+        # Proceed to dashboard
+    else:
+        ui.notify('Invalid credentials', type='negative')
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="email" type="string" required>
+  Email address to authenticate. Converted to lowercase and stripped.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  Plain text password to verify against stored hash.
+</ParamField>
+
+### Returns
+
+<ResponseField name="user" type="dict | None">
+  Returns user object on successful authentication, `None` if credentials are invalid
+  
+  <Expandable title="User Object Properties">
+    <ResponseField name="id" type="int">
+      User's database ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's full name
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User's email address
+    </ResponseField>
+    
+    <ResponseField name="student_id" type="string">
+      User's student ID
+    </ResponseField>
+    
+    <ResponseField name="active" type="bool">
+      Account status (True = active, False = inactive)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Implementation Details
+
+The function:
+1. Looks up user by email (case-insensitive)
+2. Returns `None` if user not found
+3. Verifies password using `bcrypt.checkpw()`
+4. Returns user dict (without password_hash) if password matches
+5. Returns `None` if password doesn't match
+
+## Get User by ID
+
+<CodeGroup>
+```python Function Signature
+async def get_user_by_id(student_id_input: str) -> Optional[dict]:
+    """Look up a user by their student_id for scanner login."""
+```
+
+```python Usage Example
+import database as db
+from nicegui import ui
+
+async def try_login():
+    # Student scans their ID card
+    user = await db.get_user_by_id(id_input.value.strip())
+    id_input.value = ''
+
+    if user and user['active']:
+        current_user.update(user)
+        ui.notify(f"Welcome, {user['name']}!", type='positive')
+        user_name_label.text = user['name']
+        login_cont.visible = False
+        dash_cont.visible = True
+    else:
+        ui.notify('Invalid Student ID.', type='negative')
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="student_id_input" type="string" required>
+  Student ID to lookup. Converted to string and stripped. Typically scanned from barcode.
+</ParamField>
+
+### Returns
+
+<ResponseField name="user" type="dict | None">
+  Returns user object if found, `None` if student ID doesn't exist
+  
+  <Expandable title="User Object Properties">
+    <ResponseField name="id" type="int">
+      User's database ID
+    </ResponseField>
+    
+    <ResponseField name="name" type="string">
+      User's full name
+    </ResponseField>
+    
+    <ResponseField name="email" type="string">
+      User's email address
+    </ResponseField>
+    
+    <ResponseField name="student_id" type="string">
+      User's student ID
+    </ResponseField>
+    
+    <ResponseField name="active" type="int">
+      Account status (1 = active, 0 = inactive)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Use Cases
+
+- **Barcode Scanner Login**: Primary authentication method at kiosk terminals
+- **Quick Lookup**: Fast user identification without password
+- **Card-Based Access**: Simplified login flow for physical kiosks
+
+### Security Considerations
+
+- No password required - suitable only for physical kiosk environments
+- Check `active` status before granting access
+- Student IDs should be treated as semi-public identifiers
+- Consider additional authentication for sensitive operations

@@ -1,0 +1,751 @@
+---
+title: 'System Configuration'
+description: 'Database setup, environment configuration, and backup procedures'
+---
+
+## Database Configuration
+
+### SQLite Database Setup
+
+The CS Library Kiosk uses SQLite3 as its primary database (as implemented in the current system).
+
+<Note>
+While the SRS mentions MySQL/MariaDB for production, the current implementation uses SQLite for simplicity and reliability on Raspberry Pi hardware.
+</Note>
+
+### Database Initialization
+
+<Steps>
+  <Step title="Create Database Structure">
+    The database is automatically initialized when you run the seeder:
+    
+    ```bash
+    cd /opt/cs-library-kiosk
+    source venv/bin/activate
+    python3 mock_data.py
+    ```
+    
+    This creates `cs_library.db` with the following tables:
+    - **users** - Student and admin accounts
+    - **books** - Library catalog
+    - **loans** - Checkout/return transactions
+  </Step>
+
+  <Step title="Verify Database Creation">
+    ```bash
+    # Check database file exists
+    ls -lh cs_library.db
+    
+    # Inspect database schema
+    sqlite3 cs_library.db ".schema"
+    ```
+  </Step>
+
+  <Step title="View Test Accounts">
+    The seeder creates these test accounts:
+    
+    | Name | Email | Student ID | Password |
+    |------|-------|------------|----------|
+    | Kenneth | molinak4@southernct.edu | 12345 | (hashed) |
+    | Jose | user2@example.com | 11111 | (hashed) |
+    | Professor | admin@example.com | 99999 | (hashed) |
+  </Step>
+</Steps>
+
+### Database Schema Details
+
+The `database.py` module implements the following schema:
+
+#### Users Table
+
+```sql
+CREATE TABLE IF NOT EXISTS users (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id    TEXT    NOT NULL UNIQUE,
+    name          TEXT    NOT NULL,
+    email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT    NOT NULL,
+    active        INTEGER NOT NULL DEFAULT 1,
+    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### Books Table
+
+```sql
+CREATE TABLE IF NOT EXISTS books (
+    isbn    TEXT PRIMARY KEY,
+    title   TEXT NOT NULL,
+    author  TEXT NOT NULL,
+    cover   TEXT NOT NULL DEFAULT "",
+    status  TEXT NOT NULL DEFAULT "Available",
+    shelf   TEXT NOT NULL DEFAULT ""
+);
+```
+
+#### Loans Table
+
+```sql
+CREATE TABLE IF NOT EXISTS loans (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    isbn          TEXT    NOT NULL REFERENCES books(isbn),
+    checked_out   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date      DATETIME NOT NULL,
+    returned      INTEGER  NOT NULL DEFAULT 0,
+    returned_date DATETIME
+);
+```
+
+### Database Configuration in Code
+
+The database path is configured in `database.py:13`:
+
+```python
+DB_PATH = Path(__file__).parent / "cs_library.db"
+```
+
+To use a different location:
+
+```python
+# Option 1: Environment variable
+import os
+DB_PATH = Path(os.getenv('DB_PATH', '/var/lib/cs-library/cs_library.db'))
+
+# Option 2: Absolute path
+DB_PATH = Path('/opt/cs-library-kiosk/data/cs_library.db')
+```
+
+## Environment Variables
+
+### Creating Environment Configuration
+
+Create a `.env` file for environment-specific settings:
+
+<Steps>
+  <Step title="Create .env file">
+    ```bash
+    cd /opt/cs-library-kiosk
+    vim .env
+    ```
+  </Step>
+
+  <Step title="Add Configuration Variables">
+    ```bash
+    # Application Settings
+    APP_HOST=0.0.0.0
+    APP_PORT=8080
+    APP_TITLE="CS Library Kiosk"
+    
+    # Database Configuration
+    DB_PATH=/opt/cs-library-kiosk/cs_library.db
+    
+    # Open Library API Settings
+    USE_LIVE_API=True
+    API_USER_AGENT="SCSU_CS_Library_Kiosk/1.0 (molinak4@southernct.edu)"
+    API_TIMEOUT=8.0
+    
+    # Session Settings
+    SESSION_TIMEOUT=900  # 15 minutes in seconds
+    
+    # Checkout Settings
+    LOAN_PERIOD_DAYS=14
+    MAX_RENEWALS=2
+    
+    # Logging
+    LOG_LEVEL=INFO
+    LOG_FILE=/var/log/cs-library-kiosk/app.log
+    ```
+  </Step>
+
+  <Step title="Secure the .env file">
+    ```bash
+    chmod 600 .env
+    chown pi:pi .env
+    ```
+    
+    <Warning>
+    Never commit `.env` files to version control. Add `.env` to `.gitignore`.
+    </Warning>
+  </Step>
+
+  <Step title="Load Environment Variables">
+    The application already uses `python-dotenv` (in requirements.txt:33).
+    
+    Add to your `main.py`:
+    
+    ```python
+    from dotenv import load_dotenv
+    import os
+    
+    # Load environment variables
+    load_dotenv()
+    
+    # Access variables
+    HOST = os.getenv('APP_HOST', '0.0.0.0')
+    PORT = int(os.getenv('APP_PORT', '8080'))
+    ```
+  </Step>
+</Steps>
+
+## Network Configuration
+
+### Static IP Address (Recommended)
+
+For production deployment, configure a static IP address:
+
+<Steps>
+  <Step title="Edit dhcpcd configuration">
+    ```bash
+    sudo vim /etc/dhcpcd.conf
+    ```
+  </Step>
+
+  <Step title="Add static IP configuration">
+    Add at the end of the file:
+    
+    ```bash
+    # Static IP for CS Library Kiosk
+    interface eth0
+    static ip_address=192.168.1.100/24
+    static routers=192.168.1.1
+    static domain_name_servers=192.168.1.1 8.8.8.8
+    ```
+    
+    <Note>
+    Adjust the IP address, gateway, and DNS servers according to your network configuration.
+    </Note>
+  </Step>
+
+  <Step title="Restart networking">
+    ```bash
+    sudo systemctl restart dhcpcd
+    
+    # Verify new IP
+    ip addr show eth0
+    ```
+  </Step>
+</Steps>
+
+### Firewall Configuration
+
+<Steps>
+  <Step title="Install UFW (Uncomplicated Firewall)">
+    ```bash
+    sudo apt install -y ufw
+    ```
+  </Step>
+
+  <Step title="Configure firewall rules">
+    ```bash
+    # Default policies
+    sudo ufw default deny incoming
+    sudo ufw default allow outgoing
+    
+    # Allow SSH (for remote management)
+    sudo ufw allow 22/tcp
+    
+    # Allow kiosk web interface
+    sudo ufw allow 8080/tcp
+    
+    # Optional: Allow from specific IP range only
+    # sudo ufw allow from 192.168.1.0/24 to any port 8080
+    
+    # Enable firewall
+    sudo ufw enable
+    ```
+  </Step>
+
+  <Step title="Check firewall status">
+    ```bash
+    sudo ufw status verbose
+    ```
+  </Step>
+</Steps>
+
+### DNS and API Access
+
+Ensure the kiosk can reach the Open Library API:
+
+```bash
+# Test DNS resolution
+nslookup openlibrary.org
+
+# Test HTTPS connectivity
+curl -I https://openlibrary.org/api/books?bibkeys=ISBN:9780140328721&format=json&jscmd=data
+
+# Test from Python
+python3 -c "import httpx; print(httpx.get('https://openlibrary.org').status_code)"
+```
+
+## Backup Procedures
+
+### Automated Database Backups
+
+<Note>
+Per SRS Section 4.3, the system requires daily automated database backups to protect against SD card corruption.
+</Note>
+
+<Steps>
+  <Step title="Create backup directory">
+    ```bash
+    sudo mkdir -p /var/backups/cs-library-kiosk
+    sudo chown pi:pi /var/backups/cs-library-kiosk
+    ```
+  </Step>
+
+  <Step title="Create backup script">
+    ```bash
+    sudo vim /usr/local/bin/backup-cs-library.sh
+    ```
+    
+    Add the following:
+    
+    ```bash
+    #!/bin/bash
+    
+    # CS Library Kiosk Backup Script
+    BACKUP_DIR="/var/backups/cs-library-kiosk"
+    DB_PATH="/opt/cs-library-kiosk/cs_library.db"
+    TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+    BACKUP_FILE="$BACKUP_DIR/cs_library_$TIMESTAMP.db"
+    
+    # Create backup
+    sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
+    
+    # Compress backup
+    gzip "$BACKUP_FILE"
+    
+    # Keep only last 30 days of backups
+    find "$BACKUP_DIR" -name "cs_library_*.db.gz" -mtime +30 -delete
+    
+    # Log backup
+    echo "$(date): Backup completed - $BACKUP_FILE.gz" >> /var/log/cs-library-backup.log
+    ```
+  </Step>
+
+  <Step title="Make script executable">
+    ```bash
+    sudo chmod +x /usr/local/bin/backup-cs-library.sh
+    ```
+  </Step>
+
+  <Step title="Schedule daily backups with cron">
+    ```bash
+    sudo crontab -e
+    ```
+    
+    Add the following line to run backup daily at 2 AM:
+    
+    ```bash
+    0 2 * * * /usr/local/bin/backup-cs-library.sh
+    ```
+  </Step>
+
+  <Step title="Test backup script">
+    ```bash
+    sudo /usr/local/bin/backup-cs-library.sh
+    
+    # Verify backup created
+    ls -lh /var/backups/cs-library-kiosk/
+    ```
+  </Step>
+</Steps>
+
+### USB Backup (Recommended)
+
+For additional protection against SD card failure:
+
+<Steps>
+  <Step title="Mount USB drive">
+    ```bash
+    # Identify USB device
+    lsblk
+    
+    # Create mount point
+    sudo mkdir -p /mnt/usb-backup
+    
+    # Mount USB drive (adjust device as needed)
+    sudo mount /dev/sda1 /mnt/usb-backup
+    ```
+  </Step>
+
+  <Step title="Configure automatic mounting">
+    ```bash
+    # Get UUID of USB drive
+    sudo blkid /dev/sda1
+    
+    # Edit fstab
+    sudo vim /etc/fstab
+    ```
+    
+    Add line (replace UUID):
+    
+    ```bash
+    UUID=XXXX-XXXX /mnt/usb-backup vfat defaults,nofail 0 0
+    ```
+  </Step>
+
+  <Step title="Create USB backup script">
+    ```bash
+    sudo vim /usr/local/bin/backup-to-usb.sh
+    ```
+    
+    ```bash
+    #!/bin/bash
+    
+    # Sync database backups to USB
+    rsync -av --delete \
+      /var/backups/cs-library-kiosk/ \
+      /mnt/usb-backup/cs-library-backups/
+    
+    # Also backup the entire application
+    rsync -av --exclude='venv' --exclude='__pycache__' \
+      /opt/cs-library-kiosk/ \
+      /mnt/usb-backup/cs-library-app/
+    ```
+    
+    ```bash
+    sudo chmod +x /usr/local/bin/backup-to-usb.sh
+    ```
+  </Step>
+
+  <Step title="Schedule USB sync">
+    Add to crontab (runs at 3 AM):
+    
+    ```bash
+    0 3 * * * /usr/local/bin/backup-to-usb.sh
+    ```
+  </Step>
+</Steps>
+
+### Backup Restoration
+
+To restore from a backup:
+
+```bash
+# Stop the service
+sudo systemctl stop cs-library-kiosk.service
+
+# Backup current database (just in case)
+cp /opt/cs-library-kiosk/cs_library.db /tmp/cs_library_current.db
+
+# Find backup to restore
+ls -lh /var/backups/cs-library-kiosk/
+
+# Decompress and restore
+gunzip -c /var/backups/cs-library-kiosk/cs_library_20260304_020000.db.gz > /opt/cs-library-kiosk/cs_library.db
+
+# Set proper permissions
+chown pi:pi /opt/cs-library-kiosk/cs_library.db
+chmod 600 /opt/cs-library-kiosk/cs_library.db
+
+# Restart service
+sudo systemctl start cs-library-kiosk.service
+```
+
+## Application Configuration
+
+### Configuring API Integration
+
+The Open Library API integration is configured in `database.py:16`:
+
+```python
+# Enable/disable live API lookups
+USE_LIVE_API = True
+```
+
+To disable API lookups (offline mode):
+
+```python
+USE_LIVE_API = False
+```
+
+Or set via environment variable:
+
+```bash
+# In .env file
+USE_LIVE_API=False
+```
+
+### Adjusting Loan Period
+
+Default loan period is 14 days (database.py:261, 309):
+
+```python
+due = datetime.now() + timedelta(days=14)
+```
+
+To change globally, add to environment configuration:
+
+```bash
+# In .env
+LOAN_PERIOD_DAYS=21
+```
+
+Then modify `database.py`:
+
+```python
+import os
+LOAN_DAYS = int(os.getenv('LOAN_PERIOD_DAYS', '14'))
+due = datetime.now() + timedelta(days=LOAN_DAYS)
+```
+
+### Performance Tuning
+
+#### SQLite Optimization
+
+Add to database connection in `database.py:21-24`:
+
+```python
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    
+    # Performance optimizations
+    conn.execute("PRAGMA journal_mode = WAL")  # Write-Ahead Logging
+    conn.execute("PRAGMA synchronous = NORMAL")  # Faster writes
+    conn.execute("PRAGMA cache_size = 10000")  # Increase cache
+    
+    return conn
+```
+
+#### Application Performance
+
+Adjust NiceGUI settings in `main.py:450`:
+
+```python
+ui.run(
+    host='0.0.0.0',
+    port=8080,
+    title="CS Library Kiosk",
+    favicon='favicon1.ico',
+    dark=True,
+    reload=False,  # Disable auto-reload in production
+    show=False  # Don't auto-open browser
+)
+```
+
+## Logging Configuration
+
+### Application Logging
+
+Create a logging configuration:
+
+```python
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+
+# Configure logging
+log_level = os.getenv('LOG_LEVEL', 'INFO')
+log_file = os.getenv('LOG_FILE', '/var/log/cs-library-kiosk/app.log')
+
+# Create log directory if needed
+os.makedirs(os.path.dirname(log_file), exist_ok=True)
+
+# Configure logger
+logging.basicConfig(
+    level=getattr(logging, log_level),
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        RotatingFileHandler(log_file, maxBytes=10485760, backupCount=5),
+        logging.StreamHandler()
+    ]
+)
+
+logger = logging.getLogger(__name__)
+```
+
+### Log Rotation
+
+Configure logrotate:
+
+```bash
+sudo vim /etc/logrotate.d/cs-library-kiosk
+```
+
+```bash
+/var/log/cs-library-kiosk/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 pi pi
+    sharedscripts
+    postrotate
+        systemctl reload cs-library-kiosk.service > /dev/null 2>&1 || true
+    endscript
+}
+```
+
+## Monitoring and Alerts
+
+### System Health Monitoring
+
+Create a health check script:
+
+```bash
+sudo vim /usr/local/bin/health-check.sh
+```
+
+```bash
+#!/bin/bash
+
+# Check if service is running
+if ! systemctl is-active --quiet cs-library-kiosk.service; then
+    echo "ALERT: CS Library Kiosk service is not running" | \
+      logger -t cs-library-health
+    # Attempt restart
+    systemctl restart cs-library-kiosk.service
+fi
+
+# Check database accessibility
+if ! sqlite3 /opt/cs-library-kiosk/cs_library.db "SELECT 1" > /dev/null 2>&1; then
+    echo "ALERT: Database is not accessible" | \
+      logger -t cs-library-health
+fi
+
+# Check disk space
+USAGE=$(df -h / | awk 'NR==2 {print $5}' | sed 's/%//')
+if [ $USAGE -gt 90 ]; then
+    echo "ALERT: Disk usage is at ${USAGE}%" | \
+      logger -t cs-library-health
+fi
+
+# Check temperature
+TEMP=$(vcgencmd measure_temp | sed 's/temp=//' | sed 's/.C//')
+if (( $(echo "$TEMP > 80" | bc -l) )); then
+    echo "ALERT: CPU temperature is ${TEMP}°C" | \
+      logger -t cs-library-health
+fi
+```
+
+```bash
+sudo chmod +x /usr/local/bin/health-check.sh
+
+# Run every 5 minutes
+*/5 * * * * /usr/local/bin/health-check.sh
+```
+
+## Security Configuration
+
+### Database Security
+
+```bash
+# Set restrictive permissions on database
+chmod 600 /opt/cs-library-kiosk/cs_library.db
+chown pi:pi /opt/cs-library-kiosk/cs_library.db
+
+# Prevent accidental deletion
+sudo chattr +i /opt/cs-library-kiosk/cs_library.db
+# (Use 'sudo chattr -i' to unlock when needed)
+```
+
+### Password Security
+
+The system uses bcrypt for password hashing (requirements.txt:50, database.py:80):
+
+- Passwords are hashed with bcrypt salt rounds
+- Never stored in plain text
+- Verified using secure comparison
+
+### Input Validation
+
+Ensure all user inputs are validated:
+
+- ISBN format validation (10 or 13 digits)
+- Student ID format validation
+- SQL injection prevention (parameterized queries used throughout)
+- XSS prevention (NiceGUI handles escaping)
+
+## Production Checklist
+
+<Steps>
+  <Step title="Database">
+    <Check>Database initialized with schema</Check>
+    <Check>Test accounts created or removed</Check>
+    <Check>Database file permissions set (600)</Check>
+    <Check>Backup scripts configured and tested</Check>
+  </Step>
+
+  <Step title="Network">
+    <Check>Static IP configured (if required)</Check>
+    <Check>Firewall rules enabled</Check>
+    <Check>DNS resolution working</Check>
+    <Check>Open Library API accessible</Check>
+  </Step>
+
+  <Step title="Application">
+    <Check>Systemd service enabled and running</Check>
+    <Check>Environment variables configured</Check>
+    <Check>Logging configured and rotating</Check>
+    <Check>Auto-start on boot tested</Check>
+  </Step>
+
+  <Step title="Security">
+    <Check>Default passwords changed</Check>
+    <Check>SSH key-based auth enabled</Check>
+    <Check>Unnecessary services disabled</Check>
+    <Check>File permissions restricted</Check>
+  </Step>
+
+  <Step title="Monitoring">
+    <Check>Health check script running</Check>
+    <Check>Backup verification successful</Check>
+    <Check>Log rotation configured</Check>
+    <Check>Temperature monitoring active</Check>
+  </Step>
+</Steps>
+
+## Troubleshooting
+
+### Database Locked Errors
+
+```bash
+# Check for lingering processes
+lsof /opt/cs-library-kiosk/cs_library.db
+
+# If using WAL mode, check for wal files
+ls -la /opt/cs-library-kiosk/cs_library.db*
+
+# Clear WAL checkpoint
+sqlite3 /opt/cs-library-kiosk/cs_library.db "PRAGMA wal_checkpoint(FULL);"
+```
+
+### Service Fails to Start
+
+```bash
+# Check logs
+sudo journalctl -u cs-library-kiosk.service -n 50
+
+# Verify file paths in service file
+sudo systemctl cat cs-library-kiosk.service
+
+# Test manually
+cd /opt/cs-library-kiosk
+source venv/bin/activate
+python3 main.py
+```
+
+### API Timeouts
+
+```bash
+# Test API connectivity
+curl -m 10 https://openlibrary.org/api/books?bibkeys=ISBN:9780140328721&format=json
+
+# Adjust timeout in database.py:146
+async with httpx.AsyncClient(timeout=15.0) as client:
+```
+
+## Next Steps
+
+With your system fully configured:
+
+1. Test all workflows (checkout, return, search, renewals)
+2. Load production data and remove test accounts
+3. Perform user acceptance testing
+4. Document any custom configurations
+5. Train staff on system operation and maintenance

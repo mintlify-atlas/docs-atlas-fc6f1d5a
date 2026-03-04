@@ -1,0 +1,644 @@
+---
+title: Installation Guide
+description: Complete setup instructions for deploying the CS Library Kiosk
+---
+
+## Overview
+
+This guide covers the complete installation process for the CS Library Kiosk system, from initial setup to production deployment.
+
+<Note>
+  **Target Platform**: Raspberry Pi 5 (4GB RAM minimum) with 7-inch touchscreen and USB barcode scanner.
+</Note>
+
+## System Requirements
+
+### Hardware Requirements
+
+- **Raspberry Pi 5** (4GB RAM minimum, 8GB recommended)
+- **7-inch touchscreen display** (touchscreen-enabled)
+- **USB barcode scanner** (compatible with ISBN and student ID barcodes)
+- **MicroSD card** (32GB minimum, Class 10)
+- **Ethernet cable** (recommended for stable network connection)
+- **Power supply** (official Raspberry Pi power adapter)
+- **UPS (Uninterruptible Power Supply)** - optional but recommended
+
+### Software Requirements
+
+- **Python 3.11+**
+- **pip** (Python package installer)
+- **git**
+- **SQLite3** (included with Python)
+- **Network connectivity** (for Open Library API calls)
+
+## Installation Steps
+
+<Steps>
+  <Step title="Prepare the Raspberry Pi">
+    ### Install Raspberry Pi OS
+
+    1. Download Raspberry Pi OS (64-bit) Lite from the official website
+    2. Use Raspberry Pi Imager to flash the OS to your microSD card
+    3. Insert the card and boot the Raspberry Pi
+    4. Complete initial setup and connect to network
+
+    ```bash
+    # Update system packages
+    sudo apt update
+    sudo apt upgrade -y
+    ```
+
+    ### Install System Dependencies
+
+    ```bash
+    # Install Python 3.11+ and required libraries
+    sudo apt install -y python3 python3-pip python3-venv git
+
+    # Install SQLite3
+    sudo apt install -y sqlite3 libsqlite3-dev
+
+    # Install touchscreen drivers (if needed)
+    sudo apt install -y xserver-xorg-input-evdev
+    ```
+  </Step>
+
+  <Step title="Clone the Repository">
+    Clone the CS Library Kiosk repository to your Raspberry Pi:
+
+    ```bash
+    # Clone repository
+    git clone <repository-url>
+    cd cs-library-kiosk
+    ```
+
+    <Warning>
+      Replace `<repository-url>` with the actual Git repository URL provided by your administrator.
+    </Warning>
+  </Step>
+
+  <Step title="Set Up Virtual Environment">
+    Create an isolated Python environment for the project:
+
+    <CodeGroup>
+      ```bash Raspberry Pi / Linux
+      # Create virtual environment
+      python3 -m venv venv
+
+      # Activate virtual environment
+      source venv/bin/activate
+      ```
+
+      ```bash Windows (Development)
+      # Create virtual environment
+      python3 -m venv venv
+
+      # Activate virtual environment
+      venv\Scripts\activate
+      ```
+    </CodeGroup>
+
+    <Note>
+      The virtual environment isolates project dependencies from system packages.
+    </Note>
+  </Step>
+
+  <Step title="Install Python Dependencies">
+    Install all required packages from `requirements.txt`:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    ### Key Dependencies Installed
+
+    ```txt requirements.txt
+    nicegui==3.7.1          # Web UI framework
+    fastapi==0.129.0        # Backend framework
+    httpx==0.28.1           # HTTP client for API calls
+    bcrypt==5.0.0           # Password hashing
+    uvicorn==0.40.0         # ASGI server
+    python-multipart==0.0.22 # Form data parsing
+    aiosqlite==0.22.1       # Async SQLite support
+    ```
+
+    The complete dependency list includes 50 packages supporting:
+    - NiceGUI web framework with Tailwind CSS
+    - FastAPI for async backend operations
+    - httpx for Open Library API integration
+    - bcrypt for secure password hashing
+    - Socket.IO for real-time features
+  </Step>
+
+  <Step title="Initialize the Database">
+    The database is automatically created when you first run the application:
+
+    ```bash
+    # Run main.py - this creates cs_library.db
+    python3 main.py
+    ```
+
+    Press `Ctrl+C` to stop after the database is created.
+
+    ### Database Schema
+
+    The `init_db()` function creates three core tables:
+
+    ```python database.py
+    def init_db() -> None:
+        with _connect() as conn:
+            conn.executescript('''
+                CREATE TABLE IF NOT EXISTS users (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    student_id    TEXT    NOT NULL UNIQUE,
+                    name          TEXT    NOT NULL,
+                    email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                    password_hash TEXT    NOT NULL,
+                    active        INTEGER NOT NULL DEFAULT 1,
+                    created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+
+                CREATE TABLE IF NOT EXISTS books (
+                    isbn    TEXT PRIMARY KEY,
+                    title   TEXT NOT NULL,
+                    author  TEXT NOT NULL,
+                    cover   TEXT NOT NULL DEFAULT "",
+                    status  TEXT NOT NULL DEFAULT "Available",
+                    shelf   TEXT NOT NULL DEFAULT ""
+                );
+
+                CREATE TABLE IF NOT EXISTS loans (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id       INTEGER NOT NULL REFERENCES users(id),
+                    isbn          TEXT    NOT NULL REFERENCES books(isbn),
+                    checked_out   DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    due_date      DATETIME NOT NULL,
+                    returned      INTEGER  NOT NULL DEFAULT 0,
+                    returned_date DATETIME
+                );
+            ''')
+            conn.commit()
+    ```
+
+    This creates:
+    - **users** - Student and admin accounts
+    - **books** - Library catalog with ISBN as primary key
+    - **loans** - Checkout/return transaction history
+  </Step>
+
+  <Step title="Seed Initial Data">
+    Populate the database with the library catalog and test accounts:
+
+    ```bash
+    python3 mock_data.py
+    ```
+
+    ### What Gets Seeded
+
+    **Books (16 titles across 5 shelves):**
+
+    ```python mock_data.py
+    BOOKS = [
+        # Shelf 1
+        ("0471170828", "Applied Regression Analysis", "Draper & Smith", 
+         "https://covers.openlibrary.org/b/isbn/0471170828-L.jpg", "Available", "Shelf 1"),
+        
+        # Shelf 2
+        ("9780073523262", "Computer Networks: A Top Down Approach", "Behrouz A. Forouzan",
+         "https://covers.openlibrary.org/b/isbn/9780073523262-L.jpg", "Available", "Shelf 2"),
+        
+        ("0321269675", "Using UML", "Perdita Stevens",
+         "https://covers.openlibrary.org/b/isbn/0321269675-L.jpg", "Available", "Shelf 2"),
+        
+        # ... 13 more books ...
+    ]
+    ```
+
+    **Test User Accounts:**
+
+    ```python mock_data.py
+    TEST_USERS = [
+        (12345, "Kenneth Molina",  "molinak4@southernct.edu",    "changeme123"),
+        (11111, "Jose Gaspar",     "gasparmarij1@southernct.edu","changeme123"),
+        (99999, "Professor James", "james@southernct.edu",        "changeme123"),
+    ]
+    ```
+
+    | Student ID | Name | Email | Password |
+    |------------|------|-------|----------|
+    | `12345` | Kenneth Molina | molinak4@southernct.edu | `changeme123` |
+    | `11111` | Jose Gaspar | gasparmarij1@southernct.edu | `changeme123` |
+    | `99999` | Professor James | james@southernct.edu | `changeme123` |
+
+    <Warning>
+      These are test accounts. In production, change passwords immediately and disable unused test accounts.
+    </Warning>
+  </Step>
+
+  <Step title="Configure Barcode Scanner">
+    ### USB Barcode Scanner Setup
+
+    The kiosk uses a USB barcode scanner that acts as a keyboard input device:
+
+    ```bash
+    # Check if scanner is detected
+    lsusb
+
+    # Verify scanner input
+    evtest
+    ```
+
+    The scanner should appear as an HID device. When you scan a barcode, it sends the characters as keyboard input.
+
+    <Note>
+      No additional driver configuration needed - the scanner works as a standard keyboard input device.
+    </Note>
+
+    ### Testing the Scanner
+
+    1. Launch the kiosk: `python3 main.py`
+    2. Navigate to `http://localhost:8080`
+    3. Click in the student ID input field
+    4. Scan a test student ID barcode
+    5. Verify the ID appears in the input field
+  </Step>
+
+  <Step title="Configure Network Settings">
+    ### Set Static IP (Recommended)
+
+    For reliable kiosk operation, configure a static IP:
+
+    ```bash
+    # Edit network configuration
+    sudo nano /etc/dhcpcd.conf
+    ```
+
+    Add these lines:
+
+    ```bash
+    interface eth0
+    static ip_address=192.168.1.100/24
+    static routers=192.168.1.1
+    static domain_name_servers=8.8.8.8 8.8.4.4
+    ```
+
+    Adjust IP addresses to match your network configuration.
+
+    ### Open Library API Access
+
+    The system queries Open Library for book metadata:
+
+    ```python database.py
+    async def _fetch_from_open_library(isbn: str) -> Optional[dict]:
+        """Fetch book metadata from Open Library and cache it locally."""
+        
+        url = (
+            f"https://openlibrary.org/api/books"
+            f"?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
+        )
+        headers = {"User-Agent": "SCSU_CS_Library_Kiosk/1.0 (molinak4@southernct.edu)"}
+        
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                response = await client.get(url, headers=headers)
+            
+            if response.status_code != 200:
+                return None
+            
+            data = response.json()
+            # ... parse and cache book data ...
+        except httpx.TimeoutException:
+            print(f" [API] Timeout looking up ISBN {isbn}.")
+            return None
+    ```
+
+    <Note>
+      Ensure the Raspberry Pi has internet access for API lookups. Books are cached locally after first lookup.
+    </Note>
+  </Step>
+
+  <Step title="Run the Kiosk Application">
+    Start the kiosk in production mode:
+
+    ```bash
+    # Ensure virtual environment is activated
+    source venv/bin/activate
+
+    # Launch the kiosk
+    python3 main.py
+    ```
+
+    The application starts on:
+    ```
+    http://0.0.0.0:8080
+    ```
+
+    ### Server Configuration
+
+    The kiosk runs with these settings:
+
+    ```python main.py
+    ui.run(
+        host='0.0.0.0',      # Listen on all interfaces
+        port=8080,           # Default port
+        title="CS Library Kiosk",
+        favicon='favicon1.ico',
+        dark=True            # Dark theme enabled
+    )
+    ```
+
+    Access the kiosk from any device on the network:
+    - Local: `http://localhost:8080`
+    - Network: `http://192.168.1.100:8080` (use your Raspberry Pi's IP)
+  </Step>
+
+  <Step title="Set Up Autostart (Production)">
+    Configure the kiosk to start automatically on boot:
+
+    ### Create Systemd Service
+
+    ```bash
+    # Create service file
+    sudo nano /etc/systemd/system/cs-library-kiosk.service
+    ```
+
+    Add this configuration:
+
+    ```ini
+    [Unit]
+    Description=CS Library Kiosk Service
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=pi
+    WorkingDirectory=/home/pi/cs-library-kiosk
+    ExecStart=/home/pi/cs-library-kiosk/venv/bin/python3 main.py
+    Restart=always
+    RestartSec=10
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+    Enable and start the service:
+
+    ```bash
+    # Reload systemd
+    sudo systemctl daemon-reload
+
+    # Enable service on boot
+    sudo systemctl enable cs-library-kiosk.service
+
+    # Start service now
+    sudo systemctl start cs-library-kiosk.service
+
+    # Check status
+    sudo systemctl status cs-library-kiosk.service
+    ```
+
+    ### Configure Chromium Kiosk Mode
+
+    Auto-launch the browser in fullscreen:
+
+    ```bash
+    # Edit autostart
+    mkdir -p ~/.config/lxsession/LXDE-pi
+    nano ~/.config/lxsession/LXDE-pi/autostart
+    ```
+
+    Add:
+
+    ```bash
+    @chromium-browser --kiosk --disable-restore-session-state http://localhost:8080
+    ```
+  </Step>
+</Steps>
+
+## Configuration Options
+
+### Database Configuration
+
+The SQLite database is stored at:
+
+```python database.py
+DB_PATH = Path(__file__).parent / "cs_library.db"
+```
+
+### API Configuration
+
+Toggle Open Library API lookups:
+
+```python database.py
+# Set False to disable live Open Library lookups (offline/testing mode)
+USE_LIVE_API = True
+```
+
+In offline mode, only locally cached books are accessible.
+
+### Loan Period Configuration
+
+Default loan period is 14 days:
+
+```python database.py
+async def checkout_books(books: list, user_id: int) -> None:
+    """Mark each book as 'Checked Out' and create a loan record. Due in 14 days."""
+    
+    due = datetime.now() + timedelta(days=14)  # 14-day loan period
+    
+    def _checkout():
+        with _connect() as conn:
+            for book in books:
+                conn.execute(
+                    "UPDATE books SET status = 'Checked Out' WHERE isbn = ?",
+                    (book["isbn"],)
+                )
+                conn.execute(
+                    "INSERT INTO loans (user_id, isbn, due_date) VALUES (?, ?, ?)",
+                    (user_id, book["isbn"], due)
+                )
+            conn.commit()
+    
+    await _run(_checkout)
+```
+
+## Security Configuration
+
+### Password Hashing
+
+All passwords are hashed with bcrypt:
+
+```python database.py
+async def register_user(name: str, email: str, student_id: str, password: str) -> Optional[dict]:
+    """Hash the password and insert a new user. Returns user dict or None if email/student_id taken."""
+    
+    pw_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    
+    # ... insert user with hashed password ...
+```
+
+### Database Security
+
+```python database.py
+def _connect() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")  # Enforce foreign key constraints
+    return conn
+```
+
+Foreign keys are enabled to maintain referential integrity.
+
+## Backup and Maintenance
+
+### Database Backups
+
+Create automated daily backups:
+
+```bash
+# Create backup script
+nano ~/backup-library.sh
+```
+
+Add:
+
+```bash
+#!/bin/bash
+BACKUP_DIR="/home/pi/backups"
+mkdir -p $BACKUP_DIR
+cp /home/pi/cs-library-kiosk/cs_library.db $BACKUP_DIR/cs_library_$(date +%Y%m%d_%H%M%S).db
+
+# Keep only last 30 days of backups
+find $BACKUP_DIR -name "cs_library_*.db" -mtime +30 -delete
+```
+
+Make executable and add to cron:
+
+```bash
+chmod +x ~/backup-library.sh
+
+# Add to crontab (daily at 2 AM)
+crontab -e
+```
+
+Add line:
+
+```bash
+0 2 * * * /home/pi/backup-library.sh
+```
+
+### Log Monitoring
+
+View application logs:
+
+```bash
+# View systemd service logs
+sudo journalctl -u cs-library-kiosk.service -f
+
+# View last 50 lines
+sudo journalctl -u cs-library-kiosk.service -n 50
+```
+
+## Troubleshooting
+
+### Port 8080 Already in Use
+
+Change the port in `main.py`:
+
+```python main.py
+ui.run(host='0.0.0.0', port=8081, title="CS Library Kiosk", favicon='favicon1.ico', dark=True)
+```
+
+### Database Permission Errors
+
+```bash
+# Fix file permissions
+chmod 664 cs_library.db
+chown pi:pi cs_library.db
+```
+
+### Scanner Not Working
+
+```bash
+# Check USB devices
+lsusb
+
+# Check input devices
+ls -l /dev/input/
+
+# Test scanner input
+evtest /dev/input/event0
+```
+
+### Network API Timeouts
+
+Increase timeout in `database.py`:
+
+```python database.py
+async with httpx.AsyncClient(timeout=15.0) as client:  # Increase from 8.0 to 15.0
+    response = await client.get(url, headers=headers)
+```
+
+### Memory Issues on Raspberry Pi
+
+```bash
+# Check memory usage
+free -h
+
+# Increase swap space
+sudo dphys-swapfile swapoff
+sudo nano /etc/dphys-swapfile
+# Set CONF_SWAPSIZE=2048
+sudo dphys-swapfile setup
+sudo dphys-swapfile swapon
+```
+
+## Performance Optimization
+
+### Database Optimization
+
+Add indexes for frequently queried fields:
+
+```sql
+CREATE INDEX idx_loans_user_id ON loans(user_id);
+CREATE INDEX idx_loans_isbn ON loans(isbn);
+CREATE INDEX idx_books_status ON books(status);
+```
+
+### Caching
+
+Books are automatically cached after first API lookup. To pre-cache books:
+
+```bash
+# Run the seeder to cache all books
+python3 mock_data.py
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="User Guide"
+    icon="book"
+    href="/features/authentication"
+  >
+    Learn how to use all kiosk features
+  </Card>
+  <Card
+    title="API Reference"
+    icon="code"
+    href="/api/database/overview"
+  >
+    Database functions and API documentation
+  </Card>
+</CardGroup>
+
+## Support
+
+For issues or questions:
+
+- Check the [Quick Start Guide](/quickstart) for common setup issues
+- Review the SRS document at `docs/srs.md` for system specifications
+- Contact the development team:
+  - Kenneth Molina - molinak4@southernct.edu
+  - Jose Gaspar - gasparmarij1@southernct.edu
+  - Amilcar Armmand - armmanda1@southernct.edu

@@ -1,80 +1,316 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quick Start
+description: Get the CS Library Kiosk running in minutes
 ---
 
-## Get started in three steps
+## Get Up and Running
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will take you from zero to a fully functional library kiosk in just a few steps.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  **Prerequisites**: Python 3.11+, pip, and git installed on your system.
+</Note>
+
+<Steps>
+  <Step title="Clone the Repository">
+    Open a terminal and clone the repository to your local machine:
+
+    ```bash
+    git clone <repository-url>
+    cd cs-library-kiosk
+    ```
+  </Step>
+
+  <Step title="Set Up Virtual Environment">
+    Create and activate a Python virtual environment:
+
+    <CodeGroup>
+      ```bash macOS/Linux
+      python3 -m venv venv
+      source venv/bin/activate
+      ```
+
+      ```bash Windows
+      python3 -m venv venv
+      venv\Scripts\activate
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required Python packages:
+
+    ```bash
+    pip install -r requirements.txt
+    ```
+
+    This installs:
+    - `nicegui` - Web UI framework
+    - `httpx` - For Open Library API calls
+    - `bcrypt` - Password hashing
+    - `fastapi` - Backend framework
+    - And other supporting libraries
+  </Step>
+
+  <Step title="Seed the Database">
+    Populate the database with the initial catalog and test accounts:
+
+    ```bash
+    python3 mock_data.py
+    ```
+
+    <Note>
+      This creates `cs_library.db` and seeds it with:
+      - 16 books from the CS Library shelves
+      - 3 test user accounts
+    </Note>
+
+    ### Test Accounts Created
+
+    | Name | Email | Student ID | Password |
+    |------|-------|------------|----------|
+    | Kenneth Molina | molinak4@southernct.edu | `12345` | `changeme123` |
+    | Jose Gaspar | gasparmarij1@southernct.edu | `11111` | `changeme123` |
+    | Professor James | james@southernct.edu | `99999` | `changeme123` |
+  </Step>
+
+  <Step title="Launch the Kiosk">
+    Start the NiceGUI server:
+
+    ```bash
+    python3 main.py
+    ```
+
+    The kiosk will be accessible at:
+    ```
+    http://localhost:8080
+    ```
+
+    <Warning>
+      The server runs on `0.0.0.0:8080` by default, making it accessible on your local network. For production deployment, configure proper firewall rules.
+    </Warning>
+  </Step>
+
+  <Step title="Log In and Test">
+    Open your browser to `http://localhost:8080` and test the login:
+
+    1. **Student Login**: Enter student ID `12345` at the login screen
+    2. **Browse Catalog**: View the paginated book catalog
+    3. **Test Checkout**: Scan or enter an ISBN like `0471170828`
+    4. **View My Books**: Navigate to the My Books tab
+
+    <Note>
+      The login screen accepts student ID input via keyboard or barcode scanner (scanner acts as keyboard input).
+    </Note>
+  </Step>
+</Steps>
+
+## Understanding the Workflow
+
+### Student Workflow
+
+```mermaid
+graph LR
+    A[Scan Student ID] --> B[Dashboard Opens]
+    B --> C[Checkout Tab]
+    C --> D[Scan Book ISBN]
+    D --> E[Add to Cart]
+    E --> F[Confirm Checkout]
+    F --> G[Success - 14 Day Loan]
+```
+
+### How Checkout Works
+
+When you scan a book ISBN:
+
+1. System checks local database for the book
+2. If not found, queries Open Library API
+3. Book details displayed with cover image
+4. Add to cart (supports multiple books)
+5. Confirm checkout - books marked "Checked Out"
+6. Due date automatically set to 14 days from today
+
+### Database Initialization
+
+The first time you run `python3 main.py`, the system automatically calls:
+
+```python database.py
+def init_db() -> None:
+    with _connect() as conn:
+        conn.executescript('''
+            CREATE TABLE IF NOT EXISTS users (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                student_id    TEXT    NOT NULL UNIQUE,
+                name          TEXT    NOT NULL,
+                email         TEXT    NOT NULL UNIQUE COLLATE NOCASE,
+                password_hash TEXT    NOT NULL,
+                active        INTEGER NOT NULL DEFAULT 1,
+                created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS books (
+                isbn    TEXT PRIMARY KEY,
+                title   TEXT NOT NULL,
+                author  TEXT NOT NULL,
+                cover   TEXT NOT NULL DEFAULT "",
+                status  TEXT NOT NULL DEFAULT "Available",
+                shelf   TEXT NOT NULL DEFAULT ""
+            );
+
+            CREATE TABLE IF NOT EXISTS loans (
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id       INTEGER NOT NULL REFERENCES users(id),
+                isbn          TEXT    NOT NULL REFERENCES books(isbn),
+                checked_out   DATETIME DEFAULT CURRENT_TIMESTAMP,
+                due_date      DATETIME NOT NULL,
+                returned      INTEGER  NOT NULL DEFAULT 0,
+                returned_date DATETIME
+            );
+        ''')
+        conn.commit()
+```
+
+This creates three core tables: `users`, `books`, and `loans`.
+
+## Common Tasks
+
+### Adding a New Book
+
+Books are automatically added when you scan a new ISBN. The system:
+
+1. Queries Open Library API
+2. Retrieves metadata (title, author, cover)
+3. Caches locally in `cs_library.db`
+
+```python database.py
+async def get_book(isbn: str) -> Optional[dict]:
+    """Fetch a single book by ISBN. Checks local DB first, then Open Library."""
+    isbn = isbn.strip()
+    
+    # Check local database first
+    def _fetch():
+        with _connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM books WHERE isbn = ?", (isbn,)
+            ).fetchone()
+        return _row(row)
+    
+    book = await _run(_fetch)
+    
+    if book:
+        print(f" [DB] Found ISBN {isbn} in local database.")
+        return book
+    
+    # Query Open Library if not found locally
+    if USE_LIVE_API:
+        print(f" [MISS] ISBN {isbn} not in DB — querying Open Library...")
+        return await _fetch_from_open_library(isbn)
+    
+    return None
+```
+
+### Checking Out Books
+
+The checkout flow supports adding multiple books to a cart:
+
+```python main.py
+async def scan_checkout_logic():
+    book = await db.get_book(checkout_input.value)
+    checkout_input.value = ''
+    
+    if book:
+        if book['status'] != 'Available':
+            ui.notify('Book is already checked out!', type='warning')
+            return
+        
+        cart_items.append(book)
+        due = datetime.now() + timedelta(days=14)
+        checkout_due_date.text = f'Due: {due.strftime("%B %d, %Y")}'
+        
+        # Update UI with book details
+        checkout_cover.source = book['cover']
+        checkout_title.text   = book['title']
+        checkout_author.text  = book['author']
+```
+
+### Renewing Books
+
+Students can renew books from the My Books tab:
+
+```python database.py
+async def renew_book(loan_id: int) -> bool:
+    """Extend the due date of an active loan by 14 days from today."""
+    def _renew():
+        now = datetime.now()
+        new_due_date = now + timedelta(days=14)
+        with _connect() as conn:
+            loan = conn.execute(
+                "SELECT id FROM loans WHERE id = ? AND returned = 0",
+                (loan_id,)
+            ).fetchone()
+            
+            if loan is None:
+                return False
+            
+            conn.execute(
+                "UPDATE loans SET due_date = ? WHERE id = ?",
+                (new_due_date, loan_id)
+            )
+            conn.commit()
+        return True
+    
+    return await _run(_renew)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card
+    title="Full Installation Guide"
+    icon="gear"
+    href="/installation"
+  >
+    Detailed setup for production deployment
+  </Card>
+  <Card
+    title="Core Features"
+    icon="book"
+    href="/features/authentication"
+  >
+    Complete feature documentation
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Database Not Found Error
+
+If you see `cs_library.db not found`:
+
+1. Run `python3 main.py` first (creates database)
+2. Then run `python3 mock_data.py` to seed data
+
+### Import Errors
+
+If you see module import errors:
+
+```bash
+# Ensure virtual environment is activated
+source venv/bin/activate  # macOS/Linux
+venv\Scripts\activate     # Windows
+
+# Reinstall dependencies
+pip install -r requirements.txt
+```
+
+### Port Already in Use
+
+If port 8080 is already taken, modify `main.py`:
+
+```python main.py
+ui.run(host='0.0.0.0', port=8081, title="CS Library Kiosk", favicon='favicon1.ico', dark=True)
+```
+
+<Note>
+  Need help? Check the [Installation Guide](/installation) for more detailed troubleshooting steps.
 </Note>

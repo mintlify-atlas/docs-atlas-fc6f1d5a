@@ -1,0 +1,257 @@
+---
+title: Book Management
+description: Add, update, and maintain the library book catalog
+---
+
+The Book Management system allows administrators to maintain the CS Library catalog through both manual entry and automated ISBN lookup.
+
+## Adding Books
+
+There are two methods for adding books to the system:
+
+### Method 1: ISBN API Lookup (Recommended)
+
+The system automatically fetches book metadata from the Open Library API when you scan or enter an ISBN.
+
+<Steps>
+  <Step title="Scan or Enter ISBN">
+    Use the barcode scanner or manually type the 10 or 13-digit ISBN
+  </Step>
+  
+  <Step title="Automatic Metadata Fetch">
+    The system queries the Open Library API (database.py:136-199):
+    ```python
+    url = f"https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data"
+    ```
+  </Step>
+  
+  <Step title="Review Book Details">
+    The system automatically populates:
+    - **Title** - Book title from API
+    - **Author** - Primary author name
+    - **Cover Image** - High-resolution cover from Open Library
+    - **Status** - Set to "Available" by default
+  </Step>
+  
+  <Step title="Confirm Addition">
+    Review the details and confirm to add the book to your catalog
+  </Step>
+</Steps>
+
+<Note>
+The Open Library API lookup includes a timeout of 8 seconds (database.py:146). If the API is unavailable, you can use manual entry instead.
+</Note>
+
+### Method 2: Manual Entry
+
+For books without ISBN or when the API is unavailable, use manual entry.
+
+<ParamField path="isbn" type="string" required>
+  The ISBN-10 or ISBN-13 number (primary key in database)
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  The full book title
+</ParamField>
+
+<ParamField path="author" type="string" required>
+  Primary author name (format: "Last Name, First Name" or as published)
+</ParamField>
+
+<ParamField path="cover" type="string">
+  URL to cover image (optional, defaults to empty string)
+</ParamField>
+
+<ParamField path="shelf" type="string">
+  Physical shelf location (e.g., "Shelf 1", "Shelf 2") - helps students locate books
+</ParamField>
+
+<Warning>
+The ISBN must be unique. The database will reject duplicate ISBNs (database.py:249-250).
+</Warning>
+
+## Book Metadata Schema
+
+Books are stored in the `books` table with the following structure (database.py:53-60):
+
+```python
+CREATE TABLE books (
+    isbn    TEXT PRIMARY KEY,
+    title   TEXT NOT NULL,
+    author  TEXT NOT NULL,
+    cover   TEXT NOT NULL DEFAULT "",
+    status  TEXT NOT NULL DEFAULT "Available",
+    shelf   TEXT NOT NULL DEFAULT ""
+)
+```
+
+## Book Status Management
+
+Books can have the following statuses:
+
+### Available
+- Book is on the shelf and ready to check out
+- Default status for new books
+- Displayed with green badge in catalog
+
+### Checked Out
+- Book is currently borrowed by a user
+- Automatically set when a student checks out the book (database.py:267-269)
+- Displayed with red badge in catalog
+- Associated with an active loan record
+
+<Note>
+The current implementation supports "Available" and "Checked Out" status. The SRS (line 748) specifies additional future statuses: "lost", "damaged", "donated".
+</Note>
+
+## Viewing the Catalog
+
+The system provides real-time catalog access:
+
+```python
+# Get all books ordered by title
+catalog = await db.get_catalog()
+```
+
+The catalog view (mainwebsite.py:410-461) shows:
+- Book cover image
+- Title and author
+- Availability status (color-coded)
+- Shelf location
+- Pagination (12 books per page)
+
+## ISBN Lookup Process
+
+When a book is scanned, the system follows this workflow:
+
+<Steps>
+  <Step title="Check Local Database">
+    The system first searches the local database (database.py:207-213)
+  </Step>
+  
+  <Step title="Query Open Library API">
+    If not found locally and `USE_LIVE_API = True`, query the external API (database.py:221-223)
+  </Step>
+  
+  <Step title="Cache Metadata">
+    Successfully fetched books are cached in the local database for future lookups (database.py:174-189)
+  </Step>
+  
+  <Step title="Return Book Data">
+    Book metadata is returned to the interface for display
+  </Step>
+</Steps>
+
+## Offline Mode
+
+The system includes offline functionality:
+
+```python
+USE_LIVE_API = True  # Set False to disable live lookups
+```
+
+- When `USE_LIVE_API = False`, only locally cached books are available
+- Previously looked up books remain accessible
+- Useful for testing or when internet connectivity is unreliable
+
+## API Configuration
+
+The Open Library API integration (database.py:136-199) includes:
+
+<ParamField path="User-Agent" type="string">
+  Custom user agent identifies the kiosk: `"SCSU_CS_Library_Kiosk/1.0 (molinak4@southernct.edu)"`
+</ParamField>
+
+<ParamField path="timeout" type="number">
+  Request timeout set to 8.0 seconds
+</ParamField>
+
+<ParamField path="cover_image" type="string">
+  Falls back to: `https://covers.openlibrary.org/b/isbn/{isbn}-L.jpg`
+</ParamField>
+
+## Seeding Initial Catalog
+
+The project includes a database seeder for initial setup (mock_data.py:16-38):
+
+```python
+BOOKS = [
+    ("0471170828", "Applied Regression Analysis", "Draper & Smith", ..., "Available", "Shelf 1"),
+    # ... more books
+]
+```
+
+To populate the database with starter books:
+
+```bash
+python mock_data.py
+```
+
+<Warning>
+The seeder skips duplicate ISBNs to allow safe re-running (mock_data.py:72-83).
+</Warning>
+
+## Common Tasks
+
+### Adding a Donated Book
+
+When students donate books (US011 in SRS):
+
+1. Scan the book's ISBN at the kiosk
+2. System fetches metadata from Open Library
+3. Student confirms book details
+4. Book is added with status "Available"
+5. Donation is logged with timestamp
+
+<Note>
+The SRS (line 258-266) specifies donation workflow features. Current implementation uses the standard `add_book` function (database.py:238-252).
+</Note>
+
+### Updating Book Information
+
+To modify book details:
+
+- Access the admin dashboard
+- Search for the book by ISBN, title, or author
+- Update editable fields (title, author, shelf location)
+- Save changes to database
+
+<Warning>
+The ISBN cannot be changed after creation (it's the primary key). To correct an ISBN error, you must delete the entry and create a new one.
+</Warning>
+
+### Removing Books
+
+For lost or damaged books:
+
+<Note>
+The current implementation doesn't include a delete function. The SRS (line 356) specifies soft delete functionality for archiving records. This is a planned feature.
+</Note>
+
+## Best Practices
+
+- **Always verify ISBN accuracy** before adding books
+- **Use shelf locations** to help students find physical books
+- **Review API-fetched metadata** - occasionally author names may need manual correction
+- **Update cover images manually** if the API returns a placeholder
+- **Maintain consistent author name formatting** for better search results
+
+## Database Reference
+
+Key functions for book management:
+
+- `get_book(isbn)` - Fetch single book by ISBN (database.py:202-225)
+- `get_catalog()` - Retrieve all books sorted by title (database.py:228-235)
+- `add_book(isbn, title, author, cover)` - Add new book manually (database.py:238-252)
+- `_fetch_from_open_library(isbn)` - API metadata lookup (database.py:136-199)
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="User Management" icon="users" href="/admin/user-management">
+    Manage library users and permissions
+  </Card>
+  <Card title="Reports" icon="chart-line" href="/admin/reports">
+    View catalog statistics and popular books
+  </Card>
+</CardGroup>

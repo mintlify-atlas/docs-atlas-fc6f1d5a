@@ -1,0 +1,535 @@
+---
+title: 'Dashboard Component'
+description: 'Main library kiosk interface with catalog browsing, checkout, return, and user book management'
+icon: 'grid'
+---
+
+The dashboard module provides the primary post-login interface for the CS Library Kiosk, featuring book catalog browsing, checkout cart management, book returns, and personal book tracking.
+
+## dashboard.create()
+
+Creates a comprehensive library management dashboard with tabbed navigation and multiple workspaces.
+
+### Signature
+
+```python
+def create(
+    on_checkout_scan: Callable,
+    on_checkout_confirm: Callable,
+    on_return_scan: Callable,
+    on_search: Callable,
+    on_my_books_load: Callable,
+    on_next_page: Callable,
+    on_prev_page: Callable
+) -> tuple[
+    ui.column,      # container
+    ui.input,       # checkout_input
+    ui.image,       # checkout_cover
+    ui.label,       # checkout_title
+    ui.label,       # checkout_author
+    ui.column,      # cart_container
+    ui.button,      # checkout_btn
+    ui.input,       # return_input
+    ui.image,       # return_cover
+    ui.label,       # return_title
+    ui.label,       # return_status
+    ui.column,      # empty_cart_message
+    ui.row,         # catalog_grid
+    ui.label,       # checkout_due_date
+    ui.column,      # active_loans_container
+    ui.column,      # no_active_loans
+    ui.column,      # history_container
+    ui.column,      # no_history
+    ui.button,      # prev_btn
+    ui.button,      # next_btn
+    ui.label        # page_label
+]
+```
+
+### Parameters
+
+<ParamField path="on_checkout_scan" type="Callable" required>
+  Async callback triggered when user scans a book ISBN in the checkout workspace (Enter key on `checkout_input`).
+  
+  **Expected behavior:**
+  - Fetch book data by ISBN/barcode
+  - Validate book is available
+  - Add to cart and update UI
+  - Show book preview (cover, title, author, due date)
+  
+  See usage example for implementation pattern.
+</ParamField>
+
+<ParamField path="on_checkout_confirm" type="Callable" required>
+  Async callback triggered when user clicks the "CONFIRM CHECKOUT" button.
+  
+  **Expected behavior:**
+  - Process all items in cart
+  - Update database (mark books as checked out)
+  - Show success notification
+  - Clear cart UI
+  - Refresh catalog to reflect new availability
+</ParamField>
+
+<ParamField path="on_return_scan" type="Callable" required>
+  Async callback triggered when user scans a book barcode in the return workspace (Enter key on `return_input`).
+  
+  **Expected behavior:**
+  - Fetch book data
+  - Validate book is checked out
+  - Process return in database
+  - Update return preview (cover, title, status badge)
+  - Show success notification
+</ParamField>
+
+<ParamField path="on_search" type="Callable" required>
+  Callback triggered on search input value changes.
+  
+  **Parameters:**
+  - Receives search query string as argument
+  
+  **Expected behavior:**
+  - Filter catalog by title or author
+  - Reset to page 1
+  - Refresh catalog display
+</ParamField>
+
+<ParamField path="on_my_books_load" type="Callable" required>
+  Async callback triggered when "MY BOOKS" tab is clicked.
+  
+  **Expected behavior:**
+  - Fetch user's active loans and history
+  - Populate `active_loans_container` with current checkouts
+  - Populate `history_container` with returned books
+  - Show/hide empty state messages
+  - Enable/disable renew buttons based on overdue status
+</ParamField>
+
+<ParamField path="on_next_page" type="Callable" required>
+  Async callback for catalog pagination - advance to next page.
+  
+  **Expected behavior:**
+  - Increment page counter
+  - Refresh catalog grid
+  - Update page label
+  - Enable/disable prev/next buttons as needed
+</ParamField>
+
+<ParamField path="on_prev_page" type="Callable" required>
+  Async callback for catalog pagination - go to previous page.
+  
+  **Expected behavior:**
+  - Decrement page counter (minimum 1)
+  - Refresh catalog grid
+  - Update page label
+  - Enable/disable prev/next buttons as needed
+</ParamField>
+
+### Returns
+
+Returns a tuple of 21 UI elements for programmatic access:
+
+<ResponseField name="container" type="ui.column">
+  Root container with class `scsu-bg w-full h-screen items-center pt-28 overflow-y-auto`.
+  
+  **Initially hidden** (`visible = False`) - set to `True` after successful login.
+</ResponseField>
+
+<ResponseField name="checkout_input" type="ui.input">
+  ISBN/barcode input field in checkout workspace. Placeholder: "Scan ISBN..."
+  
+  Bound to `on_checkout_scan` via `keydown.enter` event.
+</ResponseField>
+
+<ResponseField name="checkout_cover" type="ui.image">
+  Book cover preview in checkout workspace. Default source: placeholder image.
+  
+  Update with `checkout_cover.source = book['cover']`
+</ResponseField>
+
+<ResponseField name="checkout_title" type="ui.label">
+  Book title display in checkout workspace. Default: "---"
+  
+  Update with `checkout_title.text = book['title']`
+</ResponseField>
+
+<ResponseField name="checkout_author" type="ui.label">
+  Book author display in checkout workspace. Default: "---"
+  
+  Update with `checkout_author.text = book['author']`
+</ResponseField>
+
+<ResponseField name="cart_container" type="ui.column">
+  Scrollable container for cart items. Clear with `cart_container.clear()` and populate with book rows.
+</ResponseField>
+
+<ResponseField name="checkout_btn" type="ui.button">
+  "CONFIRM CHECKOUT (0)" button. Initially disabled.
+  
+  Update count and enable when items added to cart.
+</ResponseField>
+
+<ResponseField name="return_input" type="ui.input">
+  Barcode input field in return workspace. Placeholder: "Scan barcode to return..."
+  
+  Bound to `on_return_scan` via `keydown.enter` event.
+</ResponseField>
+
+<ResponseField name="return_cover" type="ui.image">
+  Book cover preview in return workspace.
+</ResponseField>
+
+<ResponseField name="return_title" type="ui.label">
+  Book title display in return workspace.
+</ResponseField>
+
+<ResponseField name="return_status" type="ui.label">
+  Status badge in return workspace. Default: "WAITING FOR SCAN"
+  
+  Update to "RETURNED SUCCESSFULLY" and change styling on successful return.
+</ResponseField>
+
+<ResponseField name="empty_cart_message" type="ui.column">
+  Empty state message for cart. Contains shopping cart icon and "Cart is empty" text.
+  
+  Set `visible = False` when items are added.
+</ResponseField>
+
+<ResponseField name="catalog_grid" type="ui.row">
+  Flex-wrap container for book cards in catalog workspace.
+  
+  Clear and repopulate with `catalog_grid.clear()` and context manager.
+</ResponseField>
+
+<ResponseField name="checkout_due_date" type="ui.label">
+  Due date display in checkout preview. Initially empty.
+  
+  Set with `checkout_due_date.text = f'Due: {due_date}'`
+</ResponseField>
+
+<ResponseField name="active_loans_container" type="ui.column">
+  Container for active/checked-out books in "MY BOOKS" workspace.
+</ResponseField>
+
+<ResponseField name="no_active_loans" type="ui.column">
+  Empty state for active loans ("No books currently checked out").
+</ResponseField>
+
+<ResponseField name="history_container" type="ui.column">
+  Container for returned books history in "MY BOOKS" workspace.
+</ResponseField>
+
+<ResponseField name="no_history" type="ui.column">
+  Empty state for history ("No borrowing history yet").
+</ResponseField>
+
+<ResponseField name="prev_btn" type="ui.button">
+  "PREV PAGE" button in catalog pagination.
+</ResponseField>
+
+<ResponseField name="next_btn" type="ui.button">
+  "NEXT PAGE" button in catalog pagination.
+</ResponseField>
+
+<ResponseField name="page_label" type="ui.label">
+  Page indicator (e.g., "Page 1").
+</ResponseField>
+
+### UI Structure
+
+The dashboard contains four main workspaces accessed via a sticky navigation bar:
+
+#### Navigation Bar (Sticky Top)
+
+- **BROWSE** button → Shows catalog workspace
+- **CHECKOUT** button → Shows checkout workspace  
+- **RETURN** button → Shows return workspace
+- **MY BOOKS** button → Shows user's loans
+- **SEARCH** toggle → Reveals search input (catalog only)
+
+Active tab highlighted with blue glow effect.
+
+#### Catalog Workspace (Default)
+
+- "Current Collection" heading
+- Grid of book cards (200px wide each)
+  - Book cover image
+  - Title and author
+  - Availability badge (green "AVAILABLE" or red "CHECKED OUT")
+  - Hover scale effect
+- Pagination controls (PREV/NEXT buttons, page label)
+
+#### Checkout Workspace
+
+Two-column layout:
+
+**Left Column - Scanner**
+- "SCAN TO ADD TO CART" heading
+- ISBN barcode input
+- Book preview (cover, title, author, due date)
+- Updates on each scan
+
+**Right Column - Cart**
+- "YOUR CART" heading
+- Empty state message (cart icon) or list of scanned items
+- Each item shows: thumbnail, title, author, due date
+- "CONFIRM CHECKOUT (N)" button at bottom
+  - Disabled when cart empty (gray)
+  - Enabled when items present (blue glow)
+
+#### Return Workspace
+
+Single centered card:
+- "QUICK RETURN" heading
+- Barcode input
+- Horizontal layout:
+  - Book cover preview (left)
+  - Status badge + title (right)
+- Status badge changes color on successful return
+
+#### My Books Workspace
+
+Scrollable card with two sections:
+
+**Currently Checked Out**
+- Count display ("Total Books Checked Out: N")
+- List of active loans with:
+  - Thumbnail, title, author
+  - Due date (red if overdue, blue otherwise)
+  - "RENEW" button (disabled if overdue)
+- Empty state: "No books currently checked out"
+
+**Borrowing History**
+- List of returned books with:
+  - Thumbnail, title, author
+  - Return date
+  - Reduced opacity for historical items
+- Empty state: "No borrowing history yet"
+
+### Usage Example
+
+<CodeGroup>
+```python main.py Implementation
+from app import dashboard
+from datetime import datetime, timedelta
+import database as db
+from nicegui import ui
+
+@ui.page('/')
+async def main_page():
+    cart_items = []
+    current_user = {}
+    current_page = 1
+    items_per_page = 12
+    current_search_query = ''
+    
+    # Checkout scan handler
+    async def scan_checkout_logic():
+        book = await db.get_book(checkout_input.value)
+        checkout_input.value = ''  # Clear input
+        
+        if book:
+            if book['status'] != 'Available':
+                ui.notify('Book is already checked out!', type='warning')
+                return
+            
+            # Hide empty cart message
+            empty_cart_message.visible = False
+            
+            # Add to cart
+            cart_items.append(book)
+            
+            # Update preview
+            checkout_cover.source = book['cover']
+            checkout_title.text = book['title']
+            checkout_author.text = book['author']
+            
+            due = datetime.now() + timedelta(days=14)
+            checkout_due_date.text = f'Due: {due.strftime("%B %d, %Y")}'
+            
+            # Add cart item UI
+            with cart_container:
+                with ui.row().classes('w-full items-center gap-4 bg-white/5 p-4 rounded-xl border border-white/10'):
+                    ui.image(book['cover']).classes('w-12 h-16 rounded object-cover')
+                    with ui.column().classes('gap-0'):
+                        ui.label(book['title']).classes('text-white font-bold')
+                        ui.label(book['author']).classes('text-xs text-slate-400')
+                        ui.label(f"Due: {due.strftime('%b %d, %Y')}").classes('text-xs text-blue-400 font-bold')
+            
+            # Update button
+            checkout_btn.text = f'CONFIRM CHECKOUT ({len(cart_items)})'
+            checkout_btn.enable()
+            checkout_btn.classes(
+                remove='bg-white/5 border-white/10 text-slate-500',
+                add='bg-blue-500/20 border-blue-500/50 text-blue-400 shadow-[0_0_30px_-5px_rgba(59,130,246,0.3)]'
+            )
+        else:
+            ui.notify('Book not found', type='negative')
+    
+    # Confirm checkout handler
+    async def confirm_checkout():
+        await db.checkout_books(cart_items, current_user['id'])
+        due = datetime.now() + timedelta(days=14)
+        ui.notify(f'Successfully checked out {len(cart_items)} item(s)!', type='positive')
+        
+        # Reset cart
+        cart_items.clear()
+        cart_container.clear()
+        empty_cart_message.visible = True
+        checkout_btn.text = 'CONFIRM CHECKOUT (0)'
+        checkout_btn.disable()
+        checkout_cover.source = 'https://via.placeholder.com/200x300?text=Waiting...'
+        checkout_title.text = '---'
+        checkout_author.text = '---'
+        checkout_due_date.text = ''
+        
+        await load_catalog_books()
+    
+    # Return scan handler
+    async def scan_return_logic():
+        book = await db.get_book(return_input.value)
+        return_input.value = ''
+        
+        if book and book['status'] != 'Available':
+            success = await db.return_book(book['isbn'])
+            if success:
+                return_cover.source = book['cover']
+                return_title.text = book['title']
+                return_status.text = 'RETURNED SUCCESSFULLY'
+                return_status.classes(
+                    remove='bg-slate-800 text-slate-400',
+                    add='bg-blue-500/20 text-blue-400'
+                )
+                ui.notify('Book Returned!', type='positive')
+    
+    # Search handler
+    async def handle_search(query: str):
+        nonlocal current_search_query, current_page
+        current_search_query = (query or '').lower().strip()
+        current_page = 1
+        await load_catalog_books()
+    
+    # My Books loader
+    async def load_my_books():
+        loans = await db.get_user_loans(current_user['id'])
+        active = [l for l in loans if not l.get('returned')]
+        
+        active_loans_container.clear()
+        no_active_loans.visible = len(active) == 0
+        
+        with active_loans_container:
+            ui.label(f'Total Books Checked Out: {len(active)}').classes('text-sm text-blue-400 font-bold mb-2')
+            for loan in active:
+                # ... render loan items
+                pass
+    
+    # Pagination handlers
+    async def next_page():
+        nonlocal current_page
+        current_page += 1
+        await load_catalog_books()
+    
+    async def prev_page():
+        nonlocal current_page
+        if current_page > 1:
+            current_page -= 1
+            await load_catalog_books()
+    
+    # Create dashboard
+    (dash_cont, checkout_input, checkout_cover, checkout_title, checkout_author,
+     cart_container, checkout_btn, return_input, return_cover, return_title,
+     return_status, empty_cart_message, catalog_grid, checkout_due_date,
+     active_loans_container, no_active_loans, history_container, no_history,
+     prev_btn, next_btn, page_label) = \
+        dashboard.create(
+            scan_checkout_logic, 
+            confirm_checkout, 
+            scan_return_logic, 
+            handle_search, 
+            load_my_books, 
+            next_page, 
+            prev_page
+        )
+    
+    # Show dashboard after login
+    dash_cont.visible = True
+```
+
+```python Catalog Population
+async def load_catalog_books():
+    books = await db.get_catalog()
+    
+    # Apply search filter
+    if current_search_query:
+        filtered_books = [
+            b for b in books 
+            if current_search_query in b['title'].lower() 
+            or current_search_query in b['author'].lower()
+        ]
+    else:
+        filtered_books = books
+    
+    # Pagination
+    total_pages = max(1, (len(filtered_books) + items_per_page - 1) // items_per_page)
+    start_idx = (current_page - 1) * items_per_page
+    page_books = filtered_books[start_idx:start_idx + items_per_page]
+    
+    # Update pagination UI
+    page_label.text = f'Page {current_page} of {total_pages}'
+    
+    if current_page <= 1:
+        prev_btn.disable()
+    else:
+        prev_btn.enable()
+    
+    if current_page >= total_pages:
+        next_btn.disable()
+    else:
+        next_btn.enable()
+    
+    # Populate catalog grid
+    catalog_grid.clear()
+    with catalog_grid:
+        for book in page_books:
+            is_avail = book['status'] == 'Available'
+            with ui.card().classes('w-48 bg-[#151924]/80 rounded-xl p-3'):
+                ui.image(book['cover']).classes('w-full h-56 object-cover rounded-lg')
+                ui.label(book['title']).classes('text-sm text-white font-bold')
+                ui.label(book['author']).classes('text-xs text-slate-400')
+                if is_avail:
+                    ui.label('AVAILABLE').classes('text-[9px] bg-green-500/20 text-green-400 px-2 py-1 rounded-full')
+                else:
+                    ui.label('CHECKED OUT').classes('text-[9px] bg-red-500/20 text-red-400 px-2 py-1 rounded-full')
+```
+</CodeGroup>
+
+## Navigation State Management
+
+The dashboard uses internal state to manage tab switching:
+
+```python
+# Internal function (not exported)
+def update_nav(selected_key):
+    # Removes active styling from all buttons
+    # Applies blue glow to selected button
+```
+
+Workspaces are shown/hidden via `visible` property:
+- `catalog_workspace.visible = True`
+- `checkout_workspace.visible = False`
+- etc.
+
+## Styling Classes
+
+Key Tailwind classes used:
+
+- **Nav bar**: `bg-slate-900/40 border border-white/5 backdrop-blur-2xl rounded-full`
+- **Cards**: `bg-[#151924]/80 border border-slate-700/50 rounded-[32px]`
+- **Buttons (active)**: `bg-white/5 shadow-[0_0_20px_rgba(59,130,246,0.5)] border-white/10`
+- **Buttons (hover)**: `hover:bg-blue-600/40 hover:shadow-[0_0_30px_-5px_rgba(59,130,246,0.5)]`
+
+## See Also
+
+- [Login Components](/api/ui/login) - Authentication interfaces
+- [Register Component](/api/ui/register) - Account creation
+- [Database Module](/api/database/overview) - Book and loan management functions

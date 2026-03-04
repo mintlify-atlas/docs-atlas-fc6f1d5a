@@ -1,0 +1,426 @@
+---
+title: Reports & Analytics
+description: Generate usage statistics, track checkout history, and analyze library activity
+---
+
+The Reporting system provides administrators with comprehensive insights into library usage, popular books, and user activity patterns.
+
+## Overview
+
+Administrators can generate various reports to:
+- Monitor library usage and trends
+- Identify popular books and authors
+- Track checkout and return patterns
+- Analyze user borrowing behavior
+- Make data-driven decisions for collection development
+
+## Available Reports
+
+Based on the SRS requirements (US010, lines 246-256), the system supports the following reporting capabilities:
+
+### Monthly Checkout Statistics
+
+Track total checkouts over time to understand library usage patterns.
+
+<ParamField path="Total Checkouts" type="number">
+  Count of all checkout transactions in the selected period
+</ParamField>
+
+<ParamField path="Total Returns" type="number">
+  Count of all return transactions in the selected period
+</ParamField>
+
+<ParamField path="Average Loans per Day" type="number">
+  Daily average of active checkouts
+</ParamField>
+
+<ParamField path="Peak Usage Days" type="array">
+  Days with highest checkout activity
+</ParamField>
+
+### Most Popular Books
+
+Identify which books are most frequently borrowed to guide future acquisitions.
+
+**Data Source:** The SRS schema (line 754) includes `total_checkouts` field on books:
+
+```python
+"total_checkouts": "Integer (default: 0)"
+"last_checkout_date": "Date (optional)"
+```
+
+Report includes:
+- Book title and author
+- Total number of checkouts
+- Last checkout date
+- Current status (available/checked out)
+
+<Note>
+The current database schema (database.py:53-60) does not yet include the `total_checkouts` counter. This is a planned enhancement based on SRS requirements.
+</Note>
+
+### Checkout History
+
+View complete transaction history across all users and books.
+
+**Query Source:** Loans table (database.py:62-70)
+
+```python
+CREATE TABLE loans (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id       INTEGER NOT NULL REFERENCES users(id),
+    isbn          TEXT    NOT NULL REFERENCES books(isbn),
+    checked_out   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    due_date      DATETIME NOT NULL,
+    returned      INTEGER  NOT NULL DEFAULT 0,
+    returned_date DATETIME
+)
+```
+
+Filters available:
+- **Date Range** - Filter by checkout or return date
+- **User** - View transactions for specific student
+- **Book** - View all loans for a specific ISBN
+- **Status** - Filter by active/returned/overdue
+
+### Overdue Books Report
+
+Identify books past their due date for follow-up.
+
+<Steps>
+  <Step title="Query Active Loans">
+    Fetch all loans where `returned = 0`
+  </Step>
+  
+  <Step title="Check Due Dates">
+    Compare `due_date` against current timestamp:
+    ```python
+    if isinstance(due, datetime):
+        overdue = due < datetime.now()
+    ```
+  </Step>
+  
+  <Step title="Calculate Days Overdue">
+    Compute difference between current date and due date
+  </Step>
+  
+  <Step title="Generate Report">
+    Display sorted by days overdue (longest overdue first)
+  </Step>
+</Steps>
+
+Report fields:
+- User name and student ID
+- Book title and ISBN
+- Due date
+- Days overdue
+- Contact email
+
+<Warning>
+The SRS (lines 770-772) specifies `overdue_days` and `late_fee` tracking in the transactions table. This functionality is planned but not yet implemented.
+</Warning>
+
+### Usage Patterns
+
+Analyze when and how the library is used.
+
+**Time-based Analytics:**
+- Checkouts by day of week
+- Checkouts by time of day
+- Peak usage hours
+- Semester trends
+
+**User Behavior:**
+- Most active borrowers
+- Average loan duration
+- Renewal patterns
+- Return compliance rate
+
+<Note>
+The SRS (line 255) specifies "Usage patterns by time of day/day of week" as a key reporting feature.
+</Note>
+
+## Data Export
+
+The SRS requires CSV export functionality for record keeping (US008, line 230; US010, line 254).
+
+### Export Formats
+
+**CSV Export** - Compatible with Excel, Google Sheets
+- Comma-separated values
+- Header row with column names
+- UTF-8 encoding for special characters
+
+**Print Summary Reports** - For physical records
+- Formatted for 8.5" x 11" paper
+- Includes timestamp and admin signature line
+
+### Exportable Data
+
+<CodeGroup>
+```python Active Checkouts Export
+# All currently checked-out books
+SELECT 
+  u.name, u.student_id, u.email,
+  b.title, b.author, b.isbn,
+  l.checked_out, l.due_date
+FROM loans l
+JOIN users u ON l.user_id = u.id
+JOIN books b ON l.isbn = b.isbn
+WHERE l.returned = 0
+ORDER BY l.due_date
+```
+
+```python Complete Transaction History
+# All loans (active and returned)
+SELECT 
+  u.name, u.student_id,
+  b.title, b.author,
+  l.checked_out, l.due_date, 
+  l.returned, l.returned_date
+FROM loans l
+JOIN users u ON l.user_id = u.id
+JOIN books b ON l.isbn = b.isbn
+ORDER BY l.checked_out DESC
+```
+
+```python Popular Books Report
+# Books with checkout counts
+SELECT 
+  b.title, b.author, b.isbn,
+  COUNT(l.id) as checkout_count,
+  MAX(l.checked_out) as last_checkout
+FROM books b
+LEFT JOIN loans l ON b.isbn = l.isbn
+GROUP BY b.isbn
+ORDER BY checkout_count DESC
+```
+</CodeGroup>
+
+## Real-Time Dashboard Statistics
+
+The admin dashboard (US008, lines 222-232) should display:
+
+<ParamField path="Total Books" type="number">
+  Count of all books in catalog:
+  ```python
+  total_books = len(await db.get_catalog())
+  ```
+</ParamField>
+
+<ParamField path="Available Books" type="number">
+  Count of books with status="Available"
+</ParamField>
+
+<ParamField path="Checked Out" type="number">
+  Count of books with status="Checked Out"
+</ParamField>
+
+<ParamField path="Active Users" type="number">
+  Count of users with active=1
+</ParamField>
+
+<ParamField path="Today's Checkouts" type="number">
+  Count of loans created today (checked_out date = current date)
+</ParamField>
+
+<ParamField path="Overdue Items" type="number">
+  Count of active loans past due date
+</ParamField>
+
+## Filtering and Sorting
+
+Administrators can filter reports by:
+
+### Date Filters
+- Today
+- This Week  
+- This Month
+- This Semester
+- Custom Date Range
+- Overdue (due_date < current_date)
+
+### Sort Options
+
+**For Checkouts:**
+- Sort by borrower name (alphabetical)
+- Sort by book title (alphabetical)
+- Sort by due date (soonest first)
+- Sort by checkout date (newest first)
+
+**For Books:**
+- Sort by title (A-Z)
+- Sort by author (A-Z)
+- Sort by popularity (most checked out first)
+- Sort by last checkout date (most recent first)
+
+<Note>
+The SRS (US008, lines 228-229) explicitly requires filtering and sorting: "Filter by due date (today, overdue, upcoming)" and "Sort by borrower name or book title"
+</Note>
+
+## User-Specific Reports
+
+View borrowing history for individual users:
+
+```python
+# Get all loans for a specific user
+loans = await db.get_user_loans(user_id)
+```
+
+Returns (database.py:337-360):
+- All loans (active and returned)
+- Book details (title, author, cover)
+- Checkout and return dates
+- Overdue status for active loans
+
+### User Activity Summary
+
+<ParamField path="Total Checkouts" type="number">
+  Lifetime count of books borrowed
+</ParamField>
+
+<ParamField path="Current Checkouts" type="number">
+  Number of books currently checked out
+</ParamField>
+
+<ParamField path="Overdue Books" type="number">
+  Number of active loans past due date
+</ParamField>
+
+<ParamField path="Return Rate" type="percentage">
+  Percentage of books returned on time
+</ParamField>
+
+## Planned Reporting Features
+
+Based on the SRS schema and requirements, future enhancements include:
+
+### System Logs Report
+
+The SRS (lines 789-801) defines a SystemLog entity:
+
+```python
+"log_id": "String (unique, required, primary key)",
+"user_id": "String (ref: User, optional)",
+"action": "String (required)",  # 'login', 'checkout', 'system_start'
+"log_level": "String (enum: ['info', 'warning', 'error', 'critical'])",
+"timestamp": "Date (required)"
+```
+
+Will enable:
+- User login activity tracking
+- System error monitoring  
+- Security audit trails
+- Performance metrics
+
+### Reservation Reports
+
+The SRS (lines 803-815) includes reservation tracking:
+
+```python
+"reservation_id": "String (unique, required, primary key)",
+"user_id": "String (ref: User, required)",
+"book_id": "String (ref: Book, required)",
+"status": "String (enum: ['pending', 'ready', 'cancelled'])"
+```
+
+Will enable:
+- Pending reservation queue
+- Notification status tracking
+- Hold fulfillment metrics
+
+### Category Analytics
+
+The SRS (lines 778-787) includes book categorization:
+
+```python
+"category_id": "Integer (unique, required, primary key)",
+"category_name": "String (required, unique)",
+"book_count": "Integer (default: 0)"
+```
+
+Will enable:
+- Checkouts by category (programming, theory, etc.)
+- Collection balance analysis
+- Acquisition recommendations by subject
+
+<Warning>
+These features are defined in the SRS but not yet implemented in the current codebase (database.py). They represent planned functionality.
+</Warning>
+
+## Generating Reports
+
+Typical workflow for creating a report:
+
+<Steps>
+  <Step title="Access Admin Dashboard">
+    Log in with admin credentials and navigate to Reports section
+  </Step>
+  
+  <Step title="Select Report Type">
+    Choose from:
+    - Monthly Statistics
+    - Popular Books
+    - Checkout History
+    - Overdue Items
+    - User Activity
+  </Step>
+  
+  <Step title="Apply Filters">
+    Set date range, user, book, or status filters as needed
+  </Step>
+  
+  <Step title="Configure Sort Order">
+    Choose how to sort the results
+  </Step>
+  
+  <Step title="Generate Report">
+    View on screen or export to CSV
+  </Step>
+</Steps>
+
+## Best Practices
+
+- **Regular monitoring** - Check overdue reports weekly
+- **Trend analysis** - Compare monthly statistics to identify patterns
+- **Data backup** - Export critical reports to CSV for archival
+- **Privacy compliance** - Limit access to user-specific reports
+- **Actionable insights** - Use popular books report to guide acquisitions
+
+## Database Queries for Reports
+
+Key SQL patterns for generating reports:
+
+```sql
+-- Overdue books
+SELECT * FROM loans 
+WHERE returned = 0 
+  AND due_date < datetime('now');
+
+-- Checkouts this month
+SELECT COUNT(*) FROM loans 
+WHERE strftime('%Y-%m', checked_out) = strftime('%Y-%m', 'now');
+
+-- Most active borrowers
+SELECT user_id, COUNT(*) as checkout_count 
+FROM loans 
+GROUP BY user_id 
+ORDER BY checkout_count DESC 
+LIMIT 10;
+
+-- Average loan duration (for returned books)
+SELECT AVG(julianday(returned_date) - julianday(checked_out)) 
+FROM loans 
+WHERE returned = 1;
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Dashboard" icon="gauge" href="/admin/dashboard">
+    Return to admin dashboard overview
+  </Card>
+  <Card title="User Management" icon="users" href="/admin/user-management">
+    View and manage user accounts
+  </Card>
+</CardGroup>

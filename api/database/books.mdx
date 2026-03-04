@@ -1,0 +1,316 @@
+---
+title: 'Books'
+description: 'Book catalog management and Open Library integration'
+---
+
+## Overview
+
+The books module provides functions for managing the library catalog, including local database operations and automatic metadata fetching from the Open Library API.
+
+## Get Book
+
+<CodeGroup>
+```python Function Signature
+async def get_book(isbn: str) -> Optional[dict]:
+    """Fetch a single book by ISBN.
+    
+    Checks local DB first, then Open Library.
+    """
+```
+
+```python Usage Example
+import database as db
+from nicegui import ui
+
+async def scan_checkout_logic():
+    book = await db.get_book(checkout_input.value)
+    checkout_input.value = ''
+
+    if book:
+        if book['status'] != 'Available':
+            ui.notify('Book is already checked out!', type='warning')
+            return
+
+        cart_items.append(book)
+        checkout_cover.source = book['cover']
+        checkout_title.text = book['title']
+        checkout_author.text = book['author']
+    else:
+        ui.notify('Book not found', type='negative')
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="isbn" type="string" required>
+  ISBN-10 or ISBN-13 identifier. Leading/trailing whitespace is stripped automatically.
+</ParamField>
+
+### Returns
+
+<ResponseField name="book" type="dict | None">
+  Returns book object if found (locally or via API), `None` if not found
+  
+  <Expandable title="Book Object Properties">
+    <ResponseField name="isbn" type="string">
+      Book's ISBN identifier
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Book title
+    </ResponseField>
+    
+    <ResponseField name="author" type="string">
+      Primary author name
+    </ResponseField>
+    
+    <ResponseField name="cover" type="string">
+      URL to book cover image (from Open Library or placeholder)
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Either "Available" or "Checked Out"
+    </ResponseField>
+    
+    <ResponseField name="shelf" type="string">
+      Physical shelf location (may be empty string)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Lookup Flow
+
+1. **Local Database Check**: Queries local SQLite database first
+2. **Cache Hit**: Returns immediately if book found locally
+3. **API Fallback**: If not found and `USE_LIVE_API = True`, queries Open Library
+4. **Auto-Cache**: Successful API results are automatically saved to local DB
+5. **Offline Mode**: Returns `None` if not found locally and `USE_LIVE_API = False`
+
+## Get Catalog
+
+<CodeGroup>
+```python Function Signature
+async def get_catalog() -> list:
+    """Return all books ordered by title."""
+```
+
+```python Usage Example
+import database as db
+
+async def load_catalog_books():
+    books = await db.get_catalog()
+    
+    # Filter by search query
+    if current_search_query:
+        filtered_books = [
+            b for b in books 
+            if current_search_query in b['title'].lower() 
+            or current_search_query in b['author'].lower()
+        ]
+    else:
+        filtered_books = books
+        
+    # Paginate results
+    start_idx = (current_page - 1) * items_per_page
+    end_idx = start_idx + items_per_page
+    page_books = filtered_books[start_idx:end_idx]
+    
+    # Display in UI
+    catalog_grid.clear()
+    with catalog_grid:
+        for book in page_books:
+            # Render book card
+            ...
+```
+</CodeGroup>
+
+### Returns
+
+<ResponseField name="books" type="list[dict]">
+  List of all books in the catalog, sorted alphabetically by title
+  
+  <Expandable title="Book Object Properties">
+    <ResponseField name="isbn" type="string">
+      Book's ISBN identifier
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Book title
+    </ResponseField>
+    
+    <ResponseField name="author" type="string">
+      Primary author name
+    </ResponseField>
+    
+    <ResponseField name="cover" type="string">
+      URL to book cover image
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Either "Available" or "Checked Out"
+    </ResponseField>
+    
+    <ResponseField name="shelf" type="string">
+      Physical shelf location
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### Use Cases
+
+- **Browse Catalog**: Display all books in the library
+- **Search Implementation**: Client-side filtering by title/author
+- **Availability Check**: Filter by status to show only available books
+- **Pagination**: Split large catalogs across multiple pages
+
+## Add Book
+
+<CodeGroup>
+```python Function Signature
+async def add_book(
+    isbn: str,
+    title: str,
+    author: str,
+    cover: str = ""
+) -> bool:
+    """Insert a new book.
+    
+    Returns True on success, False if the ISBN already exists.
+    """
+```
+
+```python Usage Example
+import database as db
+
+success = await db.add_book(
+    isbn="9780132350884",
+    title="Clean Code",
+    author="Robert C. Martin",
+    cover="https://covers.openlibrary.org/b/isbn/9780132350884-L.jpg"
+)
+
+if success:
+    print("Book added successfully")
+else:
+    print("Book already exists in catalog")
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="isbn" type="string" required>
+  Unique ISBN identifier for the book
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Book title
+</ParamField>
+
+<ParamField path="author" type="string" required>
+  Primary author name
+</ParamField>
+
+<ParamField path="cover" type="string" default="">
+  URL to book cover image. Defaults to empty string if not provided.
+</ParamField>
+
+### Returns
+
+<ResponseField name="success" type="bool">
+  - `True`: Book was successfully added to the catalog
+  - `False`: ISBN already exists in the database (duplicate)
+</ResponseField>
+
+### Default Values
+
+When a book is added, the following defaults are set automatically:
+
+- `status`: "Available"
+- `shelf`: "" (empty string)
+- `cover`: "" if not provided
+
+## Fetch from Open Library
+
+<CodeGroup>
+```python Function Signature
+async def _fetch_from_open_library(isbn: str) -> Optional[dict]:
+    """Fetch book metadata from Open Library and cache it locally."""
+```
+
+```python Internal Usage
+# Called automatically by get_book() when book not found locally
+if USE_LIVE_API:
+    print(f" [MISS] ISBN {isbn} not in DB — querying Open Library...")
+    return await _fetch_from_open_library(isbn)
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="isbn" type="string" required>
+  ISBN to lookup in the Open Library API
+</ParamField>
+
+### Returns
+
+<ResponseField name="book" type="dict | None">
+  Returns book object with fetched metadata, or `None` on failure
+  
+  <Expandable title="Book Object Properties">
+    <ResponseField name="isbn" type="string">
+      Book's ISBN identifier
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Book title from API (defaults to "Unknown Title")
+    </ResponseField>
+    
+    <ResponseField name="author" type="string">
+      First author's name (defaults to "Unknown")
+    </ResponseField>
+    
+    <ResponseField name="cover" type="string">
+      Large cover image URL from Open Library
+    </ResponseField>
+    
+    <ResponseField name="status" type="string">
+      Set to "Available" for newly fetched books
+    </ResponseField>
+    
+    <ResponseField name="shelf" type="string">
+      Empty string for newly fetched books
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### API Details
+
+**Endpoint**: `https://openlibrary.org/api/books`
+
+**Request Format**:
+```
+GET https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data
+Headers:
+  User-Agent: SCSU_CS_Library_Kiosk/1.0 (molinak4@southernct.edu)
+```
+
+**Timeout**: 8 seconds
+
+**Auto-Cache**: Successful API responses are automatically saved to the local database using `INSERT OR IGNORE`
+
+### Error Handling
+
+Returns `None` in the following cases:
+- HTTP response code is not 200
+- ISBN not found in Open Library database
+- Network timeout (8 seconds)
+- Any other exception during API call or database insert
+
+### Configuration
+
+Toggle API usage with:
+```python
+USE_LIVE_API = False  # Disable for offline/testing mode
+```
+
+When disabled, `get_book()` only searches the local database.

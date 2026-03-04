@@ -1,0 +1,146 @@
+---
+title: Checkout & Return
+description: Check out books using ISBN scanning and return borrowed items
+---
+
+The CS Library Kiosk provides a streamlined self-service workflow for checking out and returning books using ISBN barcode scanning.
+
+## Checking Out Books
+
+The checkout process uses a shopping cart system that allows you to scan multiple books before confirming your checkout.
+
+<Steps>
+  <Step title="Navigate to Checkout">
+    Click the **"CHECKOUT"** button in the navigation bar at the top of the dashboard. This opens the checkout workspace with two panels: scan area and cart.
+  </Step>
+  
+  <Step title="Scan book ISBN barcodes">
+    Position the book's ISBN barcode under the scanner. The system will:
+    - Look up the book in the local database
+    - Fetch metadata from Open Library API if not cached
+    - Display the book cover, title, and author in the preview area
+    - Show the calculated due date (14 days from checkout)
+    - Add the book to your cart
+    
+    <Info>
+    The input field automatically focuses when you enter the checkout screen for quick scanning.
+    </Info>
+  </Step>
+  
+  <Step title="Review your cart">
+    Each scanned book appears in the cart on the right side showing:
+    - Book cover thumbnail
+    - Title and author
+    - Due date (formatted as "Mon DD, YYYY")
+    
+    The cart displays the message "Cart is empty" with a shopping cart icon when no items are present.
+  </Step>
+  
+  <Step title="Confirm checkout">
+    When ready, click the **"CONFIRM CHECKOUT (X)"** button at the bottom of the cart, where X is the number of items.
+    
+    The button is:
+    - Disabled (gray) when the cart is empty
+    - Enabled (blue with glow effect) when books are in the cart
+  </Step>
+  
+  <Step title="Checkout complete">
+    The system will:
+    - Mark all books as "Checked Out" in the database
+    - Create loan records with your user ID
+    - Set the due date to 14 days from today
+    - Display a success notification: "Successfully checked out X item(s)! Return by [Date]"
+    - Clear the cart and reset the interface
+    - Update the catalog to reflect availability changes
+  </Step>
+</Steps>
+
+<Warning>
+**Books already checked out cannot be added to cart**
+
+If you scan a book that's already checked out by another user, you'll see the warning: "Book is already checked out!" and the item will not be added to your cart.
+</Warning>
+
+### Due Date Policy
+
+- All books are due **14 days** from the checkout date
+- The due date is displayed in the cart for each item
+- The final checkout confirmation shows the return deadline
+- Due dates are calculated using: `datetime.now() + timedelta(days=14)`
+
+<Info>
+Example due date display: "Due: March 18, 2026"
+</Info>
+
+## Returning Books
+
+The return process is quick and requires only a single ISBN scan.
+
+<Steps>
+  <Step title="Navigate to Return">
+    Click the **"RETURN"** button in the navigation bar. This opens the return workspace with a large dropzone preview.
+  </Step>
+  
+  <Step title="Scan the book ISBN">
+    Position the book's ISBN barcode under the scanner. The system will:
+    - Validate the book exists in the database
+    - Check that the book is currently checked out
+    - Find the active loan record for this book
+    - Display the book cover and title
+  </Step>
+  
+  <Step title="Return confirmed">
+    Upon successful return:
+    - The book status changes from "Checked Out" to "Available"
+    - The loan record is marked as returned with timestamp
+    - The status badge changes from gray "WAITING FOR SCAN" to blue "RETURNED SUCCESSFULLY"
+    - A success notification appears: "Book Returned!"
+    - The catalog updates to show the book as available
+  </Step>
+</Steps>
+
+<Warning>
+**Cannot return books that are already available**
+
+If you scan a book that's already been returned or was never checked out, you'll see: "Book is already returned."
+</Warning>
+
+### Return Tracking
+
+- The system records the exact return timestamp using `datetime.now()`
+- Returned books immediately become available for other users to check out
+- Your borrowing history is updated to show the return date
+- No late fees are calculated, but overdue status is tracked
+
+## ISBN Lookup System
+
+The kiosk uses a two-tier book lookup system:
+
+1. **Local Database Cache**: Checks the SQLite database first for fast lookups
+2. **Open Library API**: If not found locally, queries the Open Library API and caches the result
+
+<Info>
+Books fetched from Open Library are automatically cached with:
+- ISBN number
+- Title
+- Author (first author if multiple)
+- Cover image URL
+- Initial status: "Available"
+</Info>
+
+## Troubleshooting
+
+**"Book not found" error**
+- Verify the ISBN barcode is scannable and complete
+- The book may not exist in Open Library database
+- Try manually entering the ISBN if the scanner fails
+
+**"Book not recognized" during return**
+- The book may not have an active loan record
+- Verify you're scanning the correct ISBN
+- Contact library staff if the issue persists
+
+**Scanner not responding**
+- Ensure the input field is focused (click the scan area)
+- Check barcode is clean and undamaged
+- Try manually typing the ISBN as a fallback

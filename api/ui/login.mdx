@@ -1,0 +1,284 @@
+---
+title: 'Login Components'
+description: 'NiceGUI component factories for student ID and email/password authentication'
+icon: 'shield-check'
+---
+
+The login module provides two authentication UI components for the CS Library Kiosk: a student ID scanner interface and an email/password login interface.
+
+## login.create()
+
+Creates a student ID-based login interface with barcode scanning support.
+
+### Signature
+
+```python
+def create(on_login_success: Callable) -> tuple[ui.element, ui.input]
+```
+
+### Parameters
+
+<ParamField path="on_login_success" type="Callable" required>
+  Callback function triggered when the user submits their student ID (via Enter key or Sign In button). 
+  
+  The function should validate the ID and handle successful authentication.
+</ParamField>
+
+### Returns
+
+<ResponseField name="container" type="ui.element">
+  The root container element with class `login-outer scsu-bg`. Contains the entire login UI with left branding panel and right input panel.
+</ResponseField>
+
+<ResponseField name="id_input" type="ui.input">
+  The student ID input field. Has autofocus enabled and is bound to the `on_login_success` callback on Enter key press.
+  
+  Access the value with `id_input.value`.
+</ResponseField>
+
+### UI Structure
+
+The component creates a split-screen layout:
+
+**Left Panel (42% width)**
+- SCSU logo (inverted/white)
+- Blue accent divider with glow effect
+- "Department of Computer Science" label
+- "CS Library Sign-in Portal" heading
+- Descriptive text
+- Copyright footer
+- Diagonal stripe texture overlay
+
+**Right Panel (58% width)**
+- "Welcome Back" heading (3rem, bold)
+- Blue accent bar with shadow
+- Instructions: "Scan your ID to enter CS Library Kiosk"
+- Student ID input field with badge icon
+- "Sign In" button with blue glow on hover
+- Live clock display (updates every second)
+
+### Styling Features
+
+- Dark theme with `#0a1f44` blue background on left panel
+- Starfield background via `scsu-bg` class
+- Input field uses NiceGUI's `dark standout` props
+- Blue (`#3b82f6`) accent color with glow effects
+- Responsive with Space Grotesk font family
+
+### Usage Example
+
+<CodeGroup>
+```python main.py
+from app import login
+import database as db
+from nicegui import ui
+
+@ui.page('/')
+async def main_page():
+    async def try_login():
+        user = await db.get_user_by_id(id_input.value.strip())
+        id_input.value = ''  # Clear input
+        
+        if user and user['active']:
+            # Store user session
+            current_user.update(user)
+            ui.notify(f"Welcome, {user['name']}!", type='positive')
+            
+            # Hide login, show dashboard
+            login_cont.visible = False
+            dashboard_cont.visible = True
+        else:
+            ui.notify('Invalid Student ID.', type='negative')
+    
+    # Create login UI
+    login_cont, id_input = login.create(try_login)
+```
+
+```python Clearing Input
+# Clear the student ID field after login attempt
+id_input.value = ''
+
+# Re-focus the input for next user
+id_input.run_method('focus')
+```
+
+```python Hiding Login UI
+# After successful authentication
+login_cont.visible = False
+
+# To show login again (e.g., logout)
+login_cont.visible = True
+id_input.value = ''
+```
+</CodeGroup>
+
+---
+
+## login_email.create()
+
+Creates an email/password authentication interface with registration link.
+
+### Signature
+
+```python
+def create(on_login_success: Callable) -> tuple[ui.element, ui.input]
+```
+
+### Parameters
+
+<ParamField path="on_login_success" type="Callable" required>
+  Callback function triggered when the user submits credentials (via Enter key on password field or Sign In button).
+  
+  The function should validate email/password and handle successful authentication.
+</ParamField>
+
+### Returns
+
+<ResponseField name="container" type="ui.element">
+  The root container element with class `login-outer scsu-bg`. Contains the entire login UI.
+</ResponseField>
+
+<ResponseField name="email_input" type="ui.input">
+  The email input field. Has autofocus enabled and includes a special `password_input` attribute for accessing the password field.
+  
+  **Special Property:**
+  - `email_input.password_input`: Reference to the password input field
+  
+  This allows you to access both fields from the returned object:
+  ```python
+  email = email_input.value
+  password = email_input.password_input.value
+  ```
+</ResponseField>
+
+### UI Structure
+
+Similar split-screen layout to `login.create()` with key differences:
+
+**Left Panel**
+- Same branding as student ID login
+
+**Right Panel**
+- "Welcome Back" heading
+- Blue accent bar
+- Instructions: "Sign in with your email and password"
+- **Email input field** with email icon
+- **Password input field** with lock icon
+- "Sign In" button
+- **Registration link**: "Don't have an account? Create one"
+- Live clock display
+
+### Interactive Features
+
+- **Enter key on email**: Focuses password field
+- **Enter key on password**: Triggers `on_login_success`
+- **Registration link**: Navigates to `/register` route
+- Password field has `type=password` for masked input
+
+### Usage Example
+
+<CodeGroup>
+```python mainwebsite.py
+from app import login_email
+import database as db
+from nicegui import ui
+
+@ui.page('/')
+async def main_page():
+    current_user = {}
+    
+    async def try_login():
+        # Access both fields via the returned email_input object
+        email = id_input.value.strip()
+        password = id_input.password_input.value
+        
+        user = await db.authenticate_user(email, password)
+        
+        if user and user['active']:
+            current_user.update(user)
+            ui.notify(f"Welcome, {user['name']}", type='positive')
+            
+            # Clear sensitive data
+            id_input.value = ""
+            id_input.password_input.value = ""
+            
+            # Show dashboard
+            login_cont.visible = False
+            app_header.visible = True
+            dash_cont.visible = True
+        else:
+            ui.notify('Invalid email or password.', type='negative')
+            # Clear only password on failed login
+            id_input.password_input.value = ""
+    
+    # Create email login UI
+    login_cont, id_input = login_email.create(try_login)
+```
+
+```python Accessing Both Fields
+# The returned object has a special property
+email_input, password_input_ref = login_email.create(callback)
+
+# Access email
+user_email = email_input.value
+
+# Access password via attached property
+user_password = email_input.password_input.value
+```
+
+```python Clearing on Logout
+def do_logout():
+    login_cont.visible = True
+    dash_cont.visible = False
+    
+    # Clear both fields
+    id_input.value = ""
+    id_input.password_input.value = ""
+    
+    current_user.clear()
+```
+</CodeGroup>
+
+## Common Patterns
+
+### Switching Between Kiosk and Web Modes
+
+```python
+# In main.py (kiosk mode with student ID scanner)
+from app import login
+login_cont, id_input = login.create(handle_id_login)
+
+# In mainwebsite.py (web mode with email/password)
+from app import login_email  
+login_cont, id_input = login_email.create(handle_email_login)
+```
+
+### Styling Customization
+
+Both components inject custom CSS via `ui.add_head_html()` with these classes:
+
+- `.login-outer`: Full viewport flex container
+- `.left-panel`: 42% width branding panel with `#0a1f44` background
+- `.right-panel`: Flexible right panel for inputs
+- `.stripe-texture`: Diagonal stripe overlay pattern
+- `.scsu-bg`: Starfield background (defined globally)
+
+### Time Display Pattern
+
+Both components include a live clock using NiceGUI timers:
+
+```python
+time_label = ui.label().classes('text-xs font-bold tracking-[0.2em] uppercase text-slate-400')
+
+def update_time():
+    time_label.text = datetime.now().strftime('%a, %b %d | %I:%M %p')
+
+ui.timer(1.0, update_time)  # Updates every second
+update_time()  # Initial update
+```
+
+## See Also
+
+- [Dashboard Component](/api/ui/dashboard) - Main application interface after login
+- [Register Component](/api/ui/register) - Account creation interface
+- [Database Module](/api/database/overview) - User authentication functions

@@ -1,0 +1,334 @@
+---
+title: 'Loans'
+description: 'Book checkout, return, renewal, and loan history functions'
+---
+
+## Overview
+
+The loans module manages the complete book circulation lifecycle: checkout, return, renewal, and loan tracking. All loans have a 14-day lending period.
+
+## Checkout Books
+
+<CodeGroup>
+```python Function Signature
+async def checkout_books(books: list, user_id: int) -> None:
+    """Mark each book as 'Checked Out' and create a loan record.
+    
+    Due in 14 days.
+    """
+```
+
+```python Usage Example
+import database as db
+from datetime import datetime, timedelta
+from nicegui import ui
+
+async def confirm_checkout():
+    await db.checkout_books(cart_items, current_user['id'])
+    
+    due = datetime.now() + timedelta(days=14)
+    ui.notify(
+        f'Successfully checked out {len(cart_items)} item(s)! '
+        f'Return by {due.strftime("%B %d, %Y")}',
+        type='positive'
+    )
+    
+    cart_items.clear()
+    await load_catalog_books()
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="books" type="list[dict]" required>
+  List of book objects to checkout. Each book dict must contain an `isbn` key.
+  
+  Example:
+  ```python
+  books = [
+      {"isbn": "9780132350884", "title": "Clean Code", ...},
+      {"isbn": "9780201633610", "title": "Design Patterns", ...}
+  ]
+  ```
+</ParamField>
+
+<ParamField path="user_id" type="int" required>
+  Database ID of the user checking out the books
+</ParamField>
+
+### Returns
+
+<ResponseField name="None" type="None">
+  This function does not return a value. All operations complete successfully or raise an exception.
+</ResponseField>
+
+### Side Effects
+
+1. **Updates Book Status**: Sets each book's status to "Checked Out"
+2. **Creates Loan Records**: Inserts one loan record per book with:
+   - `user_id`: The borrowing user
+   - `isbn`: The book identifier
+   - `checked_out`: Current timestamp (auto-set)
+   - `due_date`: Current date + 14 days
+   - `returned`: 0 (active loan)
+
+### Implementation Details
+
+```python
+due = datetime.now() + timedelta(days=14)
+
+for book in books:
+    # Update book status
+    conn.execute(
+        "UPDATE books SET status = 'Checked Out' WHERE isbn = ?",
+        (book["isbn"],)
+    )
+    # Create loan record
+    conn.execute(
+        "INSERT INTO loans (user_id, isbn, due_date) VALUES (?, ?, ?)",
+        (user_id, book["isbn"], due)
+    )
+```
+
+## Return Book
+
+<CodeGroup>
+```python Function Signature
+async def return_book(isbn: str) -> bool:
+    """Mark a book as Available and close its open loan."""
+```
+
+```python Usage Example
+import database as db
+from nicegui import ui
+
+async def scan_return_logic():
+    book = await db.get_book(return_input.value)
+    return_input.value = ''
+    
+    if book:
+        if book['status'] == 'Available':
+            ui.notify('Book is already returned.', type='warning')
+            return
+            
+        success = await db.return_book(book['isbn'])
+        if success:
+            return_cover.source = book['cover']
+            return_title.text = book['title']
+            return_status.text = 'RETURNED SUCCESSFULLY'
+            ui.notify('Book Returned!', type='positive')
+            await load_catalog_books()
+        else:
+            ui.notify('Book not recognized', type='negative')
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="isbn" type="string" required>
+  ISBN of the book to return
+</ParamField>
+
+### Returns
+
+<ResponseField name="success" type="bool">
+  - `True`: Book was successfully returned
+  - `False`: No active loan found for this ISBN
+</ResponseField>
+
+### Operation Details
+
+1. **Find Active Loan**: Queries for the most recent loan where:
+   - `isbn` matches the parameter
+   - `returned = 0` (loan is active)
+   - Orders by `checked_out DESC` to get the latest loan
+
+2. **Close Loan**: If found, updates the loan record:
+   - Sets `returned = 1`
+   - Sets `returned_date` to current timestamp
+
+3. **Update Book**: Sets book status back to "Available"
+
+### Error Cases
+
+Returns `False` when:
+- No active loan exists for the ISBN
+- Book was never checked out
+- Book was already returned
+
+## Renew Book
+
+<CodeGroup>
+```python Function Signature
+async def renew_book(loan_id: int) -> bool:
+    """Extend the due date of an active loan by 14 days from today."""
+```
+
+```python Usage Example
+import database as db
+from nicegui import ui
+
+async def renew_loan(loan_id):
+    success = await db.renew_book(loan_id)
+    
+    if success:
+        ui.notify(
+            'Book renewed successfully for 14 more days!',
+            type='positive'
+        )
+        await load_my_books()
+    else:
+        ui.notify('Could not renew book.', type='negative')
+
+# Usage in UI
+renew_btn = ui.button('RENEW', on_click=lambda: renew_loan(loan['id']))
+if overdue:
+    renew_btn.disable()  # Can't renew overdue books
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="loan_id" type="int" required>
+  Database ID of the loan record to renew
+</ParamField>
+
+### Returns
+
+<ResponseField name="success" type="bool">
+  - `True`: Loan was successfully renewed
+  - `False`: Loan not found or already returned
+</ResponseField>
+
+### Renewal Logic
+
+1. **Verify Active Loan**: Checks that loan exists and `returned = 0`
+2. **Calculate New Due Date**: `new_due_date = today + 14 days`
+3. **Update Record**: Sets `due_date` to the new date
+
+**Important**: Renewal is based on the current date, not the original due date. This means:
+- Renewing early gives 14 days from today
+- Overdue books would get 14 days from today (if allowed)
+
+### Business Logic Recommendations
+
+Consider these rules in your UI:
+- Disable renewal for overdue books
+- Limit number of renewals per loan
+- Only allow renewals within certain timeframes
+
+## Get User Loans
+
+<CodeGroup>
+```python Function Signature
+async def get_user_loans(user_id: int) -> list:
+    """Return all loans for a user, joined with book info."""
+```
+
+```python Usage Example
+import database as db
+from datetime import datetime
+from nicegui import ui
+
+async def load_my_books():
+    if not current_user:
+        return
+        
+    loans = await db.get_user_loans(current_user['id'])
+    active = [l for l in loans if not l.get('returned')]
+    history = [l for l in loans if l.get('returned')]
+
+    # Display active loans
+    with active_loans_container:
+        for loan in active:
+            due = loan.get('due_date', 'N/A')
+            overdue = False
+            
+            if isinstance(due, datetime):
+                overdue = due < datetime.now()
+                due_str = due.strftime('%B %d, %Y')
+            else:
+                due_str = due
+            
+            due_color = 'text-red-400' if overdue else 'text-blue-400'
+            
+            with ui.row().classes('w-full items-center gap-4'):
+                ui.image(loan.get('cover', '')).classes('w-12 h-16')
+                with ui.column():
+                    ui.label(loan['title']).classes('text-white font-bold')
+                    ui.label(loan['author']).classes('text-slate-400')
+                    ui.label(
+                        f"{'OVERDUE' if overdue else 'Due'}: {due_str}"
+                    ).classes(f'{due_color}')
+```
+</CodeGroup>
+
+### Parameters
+
+<ParamField path="user_id" type="int" required>
+  Database ID of the user whose loans to retrieve
+</ParamField>
+
+### Returns
+
+<ResponseField name="loans" type="list[dict]">
+  List of all loan records for the user, ordered by checkout date (newest first)
+  
+  <Expandable title="Loan Object Properties">
+    <ResponseField name="id" type="int">
+      Loan record ID
+    </ResponseField>
+    
+    <ResponseField name="returned" type="bool">
+      Whether the book has been returned (converted from integer)
+    </ResponseField>
+    
+    <ResponseField name="due_date" type="datetime | str">
+      When the book is/was due. Parsed into datetime object if valid ISO format string.
+    </ResponseField>
+    
+    <ResponseField name="returned_date" type="datetime | str | None">
+      When the book was returned. Parsed into datetime if valid, None if not returned.
+    </ResponseField>
+    
+    <ResponseField name="title" type="string">
+      Book title (joined from books table)
+    </ResponseField>
+    
+    <ResponseField name="author" type="string">
+      Book author (joined from books table)
+    </ResponseField>
+    
+    <ResponseField name="cover" type="string">
+      Book cover URL (joined from books table)
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+### SQL Query
+
+The function executes a JOIN query:
+
+```sql
+SELECT
+    l.id, l.returned, l.due_date, l.returned_date,
+    b.title, b.author, b.cover
+FROM loans l
+JOIN books b ON l.isbn = b.isbn
+WHERE l.user_id = ?
+ORDER BY l.checked_out DESC
+```
+
+### Date Parsing
+
+Datetime fields are automatically parsed:
+- SQLite stores datetimes as ISO 8601 strings
+- Function attempts to parse `due_date` and `returned_date` as datetime objects
+- Falls back to original string value if parsing fails
+
+### Use Cases
+
+- **My Books Page**: Display current checkouts and history
+- **Overdue Tracking**: Filter by due_date < now()
+- **Renewal Interface**: Show active loans with renewal options
+- **Reading History**: Filter by `returned = True`
