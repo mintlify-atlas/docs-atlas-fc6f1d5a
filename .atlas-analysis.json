@@ -1,0 +1,101 @@
+{
+  "projectType": "saas",
+  "projectName": "CS Library Kiosk",
+  "projectDescription": "A self-service library management kiosk system for the SCSU Computer Science Department with barcode scanning, automated checkout/return workflows, and real-time catalog management.",
+  "theme": "aspen",
+  "primaryColor": "#3b82f6",
+  "lightColor": "#60a5fa",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/authentication",
+              "features/checkout-return",
+              "features/catalog-search",
+              "features/my-books"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/dashboard",
+              "admin/book-management",
+              "admin/user-management",
+              "admin/reports"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/hardware-setup",
+              "deployment/raspberry-pi",
+              "deployment/configuration"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Database",
+            "pages": [
+              "api/database/overview",
+              "api/database/authentication",
+              "api/database/books",
+              "api/database/loans"
+            ]
+          },
+          {
+            "group": "UI Components",
+            "pages": [
+              "api/ui/login",
+              "api/ui/dashboard",
+              "api/ui/register"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Student ID barcode authentication for quick kiosk login",
+    "Self-service book checkout and return with ISBN scanning",
+    "Real-time catalog browsing with search and pagination",
+    "User loan tracking with due dates and renewal options",
+    "Automatic book metadata retrieval from Open Library API",
+    "Admin dashboard for book and user management",
+    "Email/password authentication for web access",
+    "Offline-capable SQLite database with bcrypt security"
+  ],
+  "publicApiSurface": [
+    "database.init_db()",
+    "database.register_user(name, email, student_id, password)",
+    "database.authenticate_user(email, password)",
+    "database.get_user_by_id(student_id_input)",
+    "database.get_book(isbn)",
+    "database.get_catalog()",
+    "database.add_book(isbn, title, author, cover)",
+    "database.checkout_books(books, user_id)",
+    "database.return_book(isbn)",
+    "database.renew_book(loan_id)",
+    "database.get_user_loans(user_id)",
+    "login.create(try_login)",
+    "login_email.create(try_login)",
+    "register.create(on_register_success, on_back_to_login)",
+    "dashboard.create(scan_checkout_logic, confirm_checkout, scan_return_logic, handle_search, load_my_books, next_page, prev_page)"
+  ]
+}
